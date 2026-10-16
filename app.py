@@ -4,22 +4,23 @@ import streamlit as st
 
 # Konfigurasi Halaman Streamlit
 st.set_page_config(
-    page_title="CEXP-CLOUD Public App", page_icon="🌐", layout="wide"
+    page_title="CEXP-CLOUD Faktur Viewer", page_icon="🌐", layout="wide"
 )
 
-st.title("🚀 Alfastore CEXP-CLOUD Container & Store Viewer")
-st.write(
-    "Aplikasi untuk mengecek isi kontainer dan mengelola data per kode toko."
-)
+st.title("🚀 Alfastore - Data Faktur LPB Tablet")
+st.write("Aplikasi untuk mengecek data faktur berdasarkan Store ID.")
 
 # Sidebar / Form Input
 st.sidebar.header("Filter & Parameter Input")
-kode_toko = st.sidebar.text_input(
-    "Masukkan Kode Toko:", value="T001", help="Contoh: T001, T002"
+store_id = st.sidebar.text_input(
+    "Masukkan Store ID:", value="M1Z7", help="Contoh: M1Z7"
 )
-endpoint = st.sidebar.text_input(
-    "Endpoint API path:", value="/api/v1/container"
+filter_val = st.sidebar.text_input(
+    "Filter (Opsional):", value="", help="Nilai filter jika ada"
 )
+
+# Endpoint API yang benar sesuai request Anda
+endpoint = "/prd/api/lpb/tablet/lpb/get_faktur/"
 
 # Header yang Anda sediakan
 headers = {
@@ -35,39 +36,35 @@ headers = {
     "Accept-Encoding": "gzip",
 }
 
-if st.sidebar.button("Muat Data Kontainer"):
+if st.sidebar.button("Muat Data Faktur"):
   url = f"https://app.alfastore.co.id{endpoint}"
+  params = {"storeId": store_id, "filter": filter_val}
 
   with st.spinner("Menghubungkan ke server..."):
     try:
-      response = requests.get(
-          url, headers=headers, params={"kode_toko": kode_toko}, timeout=15
-      )
+      response = requests.get(url, headers=headers, params=params, timeout=15)
+
+      # Menampilkan informasi URL yang di-request untuk debugging
+      st.info(f"URL Request: `{response.url}`")
 
       if response.status_code == 200:
         data = response.json()
-
         st.success(
-            f"Berhasil mengambil data untuk Kode Toko: **{kode_toko}**"
+            f"Berhasil mengambil data untuk Store ID: **{store_id}**"
         )
 
+        # Cek format data response (biasanya list atau dict di dalam key tertentu)
         if isinstance(data, list) and len(data) > 0:
           df = pd.DataFrame(data)
-          df["Kode Toko"] = kode_toko
-          st.subheader("📦 Tabel Isi Kontainer")
+          st.subheader("📦 Tabel Data Faktur")
           st.dataframe(df, use_container_width=True)
-
-          col1, col2, col3 = st.columns(3)
-          col1.metric("Total Kontainer / Item", len(df))
-          col2.metric("Kode Toko Active", kode_toko)
-          col3.metric("Status Server", "200 OK")
-
+          st.metric("Total Baris Data", len(df))
         elif isinstance(data, dict):
-          st.subheader("📦 Detail Kontainer")
-          data["Kode Toko Input"] = kode_toko
+          st.subheader("📦 Detail Response JSON")
           st.json(data)
         else:
           st.warning("Data kosong atau format response tidak dikenali.")
+          st.json(data)
       else:
         st.error(f"Gagal mengambil data. Status Code: {response.status_code}")
         st.text(response.text)
@@ -76,6 +73,5 @@ if st.sidebar.button("Muat Data Kontainer"):
       st.error(f"Terjadi kesalahan koneksi: {e}")
 else:
   st.info(
-      "Masukkan Kode Toko dan Endpoint di panel sebelah kiri, lalu klik **Muat"
-      " Data Kontainer**."
+      "Masukkan Store ID di panel sebelah kiri, lalu klik **Muat Data Faktur**."
   )
