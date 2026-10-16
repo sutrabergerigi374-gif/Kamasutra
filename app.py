@@ -1,3 +1,5 @@
+import io
+from fpdf import FPDF
 import pandas as pd
 import requests
 import streamlit as st
@@ -8,7 +10,10 @@ st.set_page_config(
 )
 
 st.title("🚀 Alfastore - Data Faktur LPB Tablet")
-st.write("Aplikasi untuk mengecek data faktur berdasarkan Store ID.")
+st.write(
+    "Aplikasi untuk mengecek, melihat detail, dan mengunduh faktur dalam bentuk"
+    " PDF."
+)
 
 # Sidebar / Form Input
 st.sidebar.header("Filter & Parameter Input")
@@ -19,10 +24,10 @@ filter_val = st.sidebar.text_input(
     "Filter (Opsional):", value="", help="Nilai filter jika ada"
 )
 
-# Endpoint API yang benar sesuai request Anda
+# Endpoint API Faktur
 endpoint = "/prd/api/lpb/tablet/lpb/get_faktur/"
 
-# Header yang Anda sediakan
+# Header API
 headers = {
     "User-Agent": (
         "Mozilla/5.0 (Linux; Android 11; Mobile) AppleWebKit/537.36 (KHTML,"
@@ -36,6 +41,37 @@ headers = {
     "Accept-Encoding": "gzip",
 }
 
+
+# Fungsi untuk membuat file PDF dari data detail faktur
+def generate_pdf_faktur(detail_data, store_id):
+  pdf = FPDF()
+  pdf.add_page()
+
+  # Judul Dokumen
+  pdf.set_font("helvetica", "B", 16)
+  pdf.cell(0, 10, "ALFASTORE - DETAIL FAKTUR LPB", new_x="LMARGIN", new_y="NEXT", align="C")
+  pdf.ln(5)
+
+  # Informasi Store ID
+  pdf.set_font("helvetica", "B", 12)
+  pdf.cell(0, 8, f"Store ID: {store_id}", new_x="LMARGIN", new_y="NEXT")
+  pdf.ln(5)
+
+  # Tabel Detail Data
+  pdf.set_font("helvetica", "B", 11)
+  pdf.set_fill_color(220, 220, 220)
+  pdf.cell(60, 10, "Atribut", border=1, fill=True)
+  pdf.cell(130, 10, "Keterangan", border=1, fill=True, new_x="LMARGIN", new_y="NEXT")
+
+  pdf.set_font("helvetica", size=11)
+  for key, val in detail_data.items():
+    pdf.cell(60, 10, str(key), border=1)
+    pdf.cell(130, 10, str(val), border=1, new_x="LMARGIN", new_y="NEXT")
+
+  # Return sebagai bytes
+  return bytes(pdf.output())
+
+
 if st.sidebar.button("Muat Data Faktur"):
   url = f"https://app.alfastore.co.id{endpoint}"
   params = {"storeId": store_id, "filter": filter_val}
@@ -44,27 +80,60 @@ if st.sidebar.button("Muat Data Faktur"):
     try:
       response = requests.get(url, headers=headers, params=params, timeout=15)
 
-      # Menampilkan informasi URL yang di-request untuk debugging
-      st.info(f"URL Request: `{response.url}`")
-
       if response.status_code == 200:
-        data = response.json()
+        res_json = response.json()
         st.success(
             f"Berhasil mengambil data untuk Store ID: **{store_id}**"
         )
 
-        # Cek format data response (biasanya list atau dict di dalam key tertentu)
-        if isinstance(data, list) and len(data) > 0:
-          df = pd.DataFrame(data)
-          st.subheader("📦 Tabel Data Faktur")
+        items = res_json.get("data", [])
+
+        if isinstance(items, list) and len(items) > 0:
+          df = pd.DataFrame(items)
+
+          st.subheader("📦 Daftar Faktur Tersedia")
           st.dataframe(df, use_container_width=True)
-          st.metric("Total Baris Data", len(df))
-        elif isinstance(data, dict):
-          st.subheader("📦 Detail Response JSON")
-          st.json(data)
+
+          st.markdown("---")
+          st.subheader("🔍 Pilih & Unduh Faktur (PDF / CSV)")
+
+          list_faktur = [item.get("faktur") for item in items if "faktur" in item]
+
+          if list_faktur:
+            selected_faktur = st.selectbox(
+                "Pilih Nomor Faktur:", list_faktur
+            )
+
+            # Cari data detail berdasarkan faktur yang dipilih
+            detail_data = next(
+                (item for item in items if item.get("faktur") == selected_faktur),
+                None,
+            )
+
+            if detail_data:
+              st.info(f"Detail Informasi untuk Faktur: {selected_faktur}")
+              st.json(detail_data)
+
+              # Tombol Download PDF
+              pdf_bytes = generate_pdf_faktur(detail_data, store_id)
+              st.download_button(
+                  label=f"📥 Download Faktur {selected_faktur} (PDF)",
+                  data=pdf_bytes,
+                  file_name=f"faktur_{selected_faktur}.pdf",
+                  mime="application/pdf",
+              )
+
+              # Tombol Download CSV (Opsional)
+              csv_data = pd.DataFrame([detail_data]).to_csv(index=False).encode("utf-8")
+              st.download_button(
+                  label=f"📥 Download Faktur {selected_faktur} (CSV)",
+                  data=csv_data,
+                  file_name=f"faktur_{selected_faktur}.csv",
+                  mime="text/csv",
+              )
         else:
-          st.warning("Data kosong atau format response tidak dikenali.")
-          st.json(data)
+          st.warning("Data faktur kosong atau tidak ditemukan.")
+          st.json(res_json)
       else:
         st.error(f"Gagal mengambil data. Status Code: {response.status_code}")
         st.text(response.text)
