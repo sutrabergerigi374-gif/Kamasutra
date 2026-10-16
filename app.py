@@ -7,10 +7,10 @@ st.set_page_config(
     page_title="CEXP-CLOUD Faktur Viewer", page_icon="🌐", layout="wide"
 )
 
-st.title("🚀 Alfastore - Detail Kiriman Faktur LPB")
+st.title("🚀 Alfastore - Data Faktur & Kontainer LPB")
 st.write(
-    "Aplikasi untuk mengecek daftar faktur dan melihat isi detail faktur"
-    " secara lengkap."
+    "Aplikasi untuk mengecek daftar faktur, melihat isi detail per kontainer,"
+    " dan mengunduh data."
 )
 
 # Sidebar / Form Input
@@ -57,7 +57,6 @@ if st.sidebar.button("Muat Daftar Faktur"):
         items = res_json.get("data", [])
 
         if isinstance(items, list) and len(items) > 0:
-          # Simpan daftar faktur ke session_state agar tidak hilang saat diklik
           st.session_state["faktur_items"] = items
           st.session_state["store_id"] = store_id
         else:
@@ -70,7 +69,7 @@ if st.sidebar.button("Muat Daftar Faktur"):
     except Exception as e:
       st.error(f"Terjadi kesalahan koneksi: {e}")
 
-# Tampilkan tabel daftar faktur jika sudah dimuat
+# Tampilkan tabel daftar faktur jika sudah dimuat di session_state
 if "faktur_items" in st.session_state:
   items = st.session_state["faktur_items"]
   current_store = st.session_state["store_id"]
@@ -102,11 +101,8 @@ if "faktur_items" in st.session_state:
 
           if det_response.status_code == 200:
             det_json = det_response.json()
-            st.success(
-                f"Berhasil memuat isi faktur: **{selected_faktur}**"
-            )
 
-            # Cek struktur data isi detail faktur (biasanya berupa list produk/barang di dalam key 'data' atau langsung)
+            # Mengambil data detail
             det_items = (
                 det_json.get("data", det_json)
                 if isinstance(det_json, dict)
@@ -115,18 +111,72 @@ if "faktur_items" in st.session_state:
 
             if isinstance(det_items, list) and len(det_items) > 0:
               df_detail = pd.DataFrame(det_items)
-              st.dataframe(df_detail, use_container_width=True)
 
-              # Tombol Download CSV untuk isi faktur
+              st.success(
+                  f"Berhasil memuat detail faktur: **{selected_faktur}**"
+              )
+              st.write("### 📦 Daftar Kontainer")
+
+              # Deteksi otomatis kolom kontainer pada data detail
+              col_kontainer = next(
+                  (
+                      c
+                      for c in df_detail.columns
+                      if "kontainer" in c.lower() or "container" in c.lower()
+                  ),
+                  None,
+              )
+
+              if col_kontainer:
+                daftar_kontainer = df_detail[col_kontainer].unique()
+                st.info(
+                    f"Ditemukan {len(daftar_kontainer)} kontainer dalam faktur"
+                    f" ini."
+                )
+
+                # Tampilkan per kontainer (Expander / Kartu terpisah)
+                for kontainer in daftar_kontainer:
+                  df_sub = df_detail[df_detail[col_kontainer] == kontainer]
+                  jumlah_item = len(df_sub)
+
+                  with st.expander(
+                      f"📦 Kontainer: {kontainer}  |  (QTY Item: {jumlah_item})"
+                  ):
+                    st.write(f"**Isi Kontainer: {kontainer}**")
+                    st.dataframe(df_sub, use_container_width=True)
+
+                    # Tombol download CSV khusus per kontainer
+                    csv_sub = df_sub.to_csv(index=False).encode("utf-8")
+                    st.download_button(
+                        label=(
+                            f"📥 Download Isi Kontainer {kontainer} (CSV)"
+                        ),
+                        data=csv_sub,
+                        file_name=(
+                            f"kontainer_{kontainer}_{selected_faktur}.csv"
+                        ),
+                        mime="text/csv",
+                        key=f"dl_{kontainer}",
+                    )
+              else:
+                # Fallback jika kolom kontainer tidak terdeteksi
+                st.warning(
+                    "Kolom pengelompokan kontainer tidak ditemukan, menampilkan"
+                    " seluruh tabel:"
+                )
+                st.dataframe(df_detail, use_container_width=True)
+
+              # Tombol Download untuk seluruh isi faktur
               csv_data = df_detail.to_csv(index=False).encode("utf-8")
               st.download_button(
                   label=(
-                      f"📥 Download Isi Faktur {selected_faktur} sebagai CSV"
+                      f"📥 Download Seluruh Isi Faktur {selected_faktur} (CSV)"
                   ),
                   data=csv_data,
                   file_name=f"detail_faktur_{selected_faktur}.csv",
                   mime="text/csv",
               )
+
             else:
               st.info(
                   "Detail data diterima, tetapi format berupa JSON murni:"
@@ -141,8 +191,10 @@ if "faktur_items" in st.session_state:
 
         except Exception as e:
           st.error(f"Terjadi kesalahan koneksi saat mengambil detail: {e}")
+  else:
+    st.info("Tidak ada faktur yang tersedia untuk dipilih.")
 else:
   st.info(
-      "Silakan masukkan Store ID di panel kiri, lalu klik **Muat Daftar"
+      "Silakan masukkan Store ID di panel sebelah kiri, lalu klik **Muat Daftar"
       " Faktur** terlebih dahulu."
   )
