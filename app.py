@@ -115,14 +115,33 @@ if "faktur_items" in st.session_state:
               st.success(
                   f"Berhasil memuat detail faktur: **{selected_faktur}**"
               )
+
+              # --- PENGECEKAN KOLOM DARI API ---
+              st.write(
+                  "**Daftar Kolom yang tersedia dari API:**",
+                  df_detail.columns.tolist(),
+              )
+              st.dataframe(df_detail, use_container_width=True)
+              # ---------------------------------
+
               st.write("### 📦 Daftar Kontainer")
 
-              # Deteksi otomatis kolom kontainer pada data detail
+              # Deteksi otomatis kolom kontainer pada data detail (berbagai pola nama)
               col_kontainer = next(
                   (
                       c
                       for c in df_detail.columns
-                      if "kontainer" in c.lower() or "container" in c.lower()
+                      if any(
+                          k in c.lower()
+                          for k in [
+                              "kontainer",
+                              "container",
+                              "bag",
+                              "box",
+                              "truk",
+                              "no_knt",
+                          ]
+                      )
                   ),
                   None,
               )
@@ -131,7 +150,7 @@ if "faktur_items" in st.session_state:
                 daftar_kontainer = df_detail[col_kontainer].unique()
                 st.info(
                     f"Ditemukan {len(daftar_kontainer)} kontainer dalam faktur"
-                    f" ini."
+                    f" ini (Kolom: {col_kontainer})."
                 )
 
                 # Tampilkan per kontainer (Expander / Kartu terpisah)
@@ -159,12 +178,10 @@ if "faktur_items" in st.session_state:
                         key=f"dl_{kontainer}",
                     )
               else:
-                # Fallback jika kolom kontainer tidak terdeteksi
                 st.warning(
-                    "Kolom pengelompokan kontainer tidak ditemukan, menampilkan"
-                    " seluruh tabel:"
+                    "Kolom pengelompokan kontainer belum terdeteksi secara"
+                    " otomatis. Silakan cek nama kolom pada daftar di atas."
                 )
-                st.dataframe(df_detail, use_container_width=True)
 
               # Tombol Download untuk seluruh isi faktur
               csv_data = df_detail.to_csv(index=False).encode("utf-8")
