@@ -9,8 +9,8 @@ st.set_page_config(
 
 st.title("🚀 Alfastore - Data Faktur & Kontainer LPB")
 st.write(
-    "Aplikasi untuk mengecek daftar faktur, melihat total nilai faktur (dalam juta), "
-    "serta menampilkan dan memisahkan isi barang per kontainer."
+    "Aplikasi untuk mengecek daftar faktur, melihat isi detail per kontainer, "
+    "dan menganalisis struktur data kontainer."
 )
 
 # Sidebar / Form Input
@@ -102,142 +102,107 @@ if "faktur_items" in st.session_state:
           if det_response.status_code == 200:
             det_json = det_response.json()
 
-            det_items = (
-                det_json.get("data", det_json)
-                if isinstance(det_json, dict)
-                else det_json
-            )
+            # Mengecek apakah data berada di dalam key 'data' atau 'detail' atau langsung list
+            det_items = []
+            if isinstance(det_json, dict):
+              det_items = det_json.get("data", det_json.get("detail", []))
+              if not det_items and isinstance(det_json, dict):
+                # Jika dict tidak punya list di dalamnya, bungkus dalam list
+                det_items = [det_json]
+            elif isinstance(det_json, list):
+              det_items = det_json
 
-            if isinstance(det_items, list) and len(det_items) > 0:
+            if len(det_items) > 0:
               df_detail = pd.DataFrame(det_items)
 
-              st.success(
-                  f"Berhasil memuat detail faktur: **{selected_faktur}**"
-              )
+              st.success(f"Berhasil memuat detail faktur: **{selected_faktur}**")
 
-              # --- HITUNG TOTAL NILAI FAKTUR & JUTA RUPIAH ---
-              # Deteksi kolom harga / total nominal
+              # --- TAMPILAN INFORMASI NAMA KOLOM UNTUK PENGECEKAN ---
+              st.info(f"📋 **Daftar Nama Kolom Asli dari API ({len(df_detail.columns)} Kolom):**")
+              st.code(", ".join([f"'{c}'" for c in df_detail.columns]))
+              # -----------------------------------------------------
+
+              # --- PENGECEKAN TOTAL RP / NOMINAL FAKTUR ---
               col_total = next(
-                  (
-                      c
-                      for c in df_detail.columns
-                      if any(
-                          k in c.lower()
-                          for k in [
-                              "total",
-                              "rp",
-                              "harga",
-                              "subtotal",
-                              "nominal",
-                              "amount",
-                              "nilai",
-                          ]
-                      )
-                  ),
+                  (c for c in df_detail.columns if any(k in c.lower() for k in ["total", "rp", "harga", "subtotal", "nominal", "amount", "nilai", "gross"])),
                   None,
               )
-
-              # Deteksi kolom QTY & Harga Satuan jika total bersih tidak ditemukan
               col_qty = next(
-                  (c for c in df_detail.columns if "qty" in c.lower() or "jumlah" in c.lower()),
+                  (c for c in df_detail.columns if any(k in c.lower() for k in ["qty", "jumlah", "quantity", "ctn"])),
                   None,
               )
 
               total_nominal = 0.0
               if col_total:
-                # Bersihkan format string ke numerik
-                total_nominal = (
-                    pd.to_numeric(
-                        df_detail[col_total]
-                        .astype(str)
-                        .str.replace(r"[^\d.]", "", regex=True),
-                        errors="coerce",
-                    )
-                    .sum()
-                )
+                total_nominal = pd.to_numeric(
+                    df_detail[col_total].astype(str).str.replace(r"[^\d.]", "", regex=True),
+                    errors="coerce",
+                ).sum()
 
               total_juta = total_nominal / 1_000_000.0
 
-              # METRIK RINGKASAN FAKTUR
               col_m1, col_m2, col_m3 = st.columns(3)
-              col_m1.metric("Total Jenis Item", f"{len(df_detail)} Item")
+              col_m1.metric("Total Item / Baris", f"{len(df_detail)} Baris")
               if col_total:
                 col_m2.metric("Total Nilai Faktur", f"Rp {total_nominal:,.0f}")
                 col_m3.metric("Nominal (Juta Rupiah)", f"Rp {total_juta:,.2f} Juta")
-              else:
-                col_m2.metric("Total QTY Barang", f"{pd.to_numeric(df_detail[col_qty], errors='coerce').sum() if col_qty else '-'}")
+              elif col_qty:
+                total_qty = pd.to_numeric(df_detail[col_qty], errors="coerce").sum()
+                col_m2.metric("Total QTY Barang", f"{total_qty:,.0f}")
                 col_m3.metric("Nominal", "Kolom Harga Tidak Ditemukan")
+              else:
+                col_m2.metric("Status Data", "Berhasil Di-load")
+                col_m3.metric("Nominal", "-")
 
               st.markdown("---")
 
-              # Tampilkan kolom API
-              st.write(
-                  "**Daftar Kolom yang tersedia dari API:**",
-                  df_detail.columns.tolist(),
-              )
-
-              # --- PENGECEKAN KOLOM KONTAINER ---
+              # --- DETEKSI KOLOM KONTAINER DENGAN KATA KUNCI LUAS ---
+              pola_kontainer = [
+                  "kontainer", "container", "knt", "koli", "box", "bag",
+                  "no_knt", "no_koli", "no_box", "no_kontainer", "no_container",
+                  "kategori", "rak", "truk", "group", "kode_knt"
+              ]
+              
               col_kontainer = next(
-                  (
-                      c
-                      for c in df_detail.columns
-                      if any(
-                          k in c.lower()
-                          for k in [
-                              "kontainer",
-                              "container",
-                              "bag",
-                              "box",
-                              "truk",
-                              "no_knt",
-                          ]
-                      )
-                  ),
+                  (c for c in df_detail.columns if any(k == c.lower() or k in c.lower() for k in pola_kontainer)),
                   None,
               )
 
               if col_kontainer:
-                daftar_kontainer = df_detail[col_kontainer].unique()
+                daftar_kontainer = df_detail[col_kontainer].dropna().unique()
 
-                st.subheader("📦 Filter & Tampilan Per Kontainer")
-                
-                # Dropdown Pilihan Kontainer Spesifik
+                st.subheader(f"📦 Terdeteksi Pengelompokan Berdasarkan Kolom: `{col_kontainer}`")
+
+                # Filter Selectbox per Kontainer
                 pilihan_kontainer = st.selectbox(
-                    "Pilih Kontainer untuk ditampilkan khusus:",
-                    ["Semua Kontainer"] + list(daftar_kontainer),
+                    "Pilih Kontainer Spesifik:",
+                    ["Semua Kontainer"] + [str(k) for k in daftar_kontainer],
                 )
 
                 if pilihan_kontainer != "Semua Kontainer":
-                  df_sub_pilihan = df_detail[df_detail[col_kontainer] == pilihan_kontainer]
+                  df_sub_pilihan = df_detail[df_detail[col_kontainer].astype(str) == str(pilihan_kontainer)]
                   st.write(f"### 📥 Isi Khusus Kontainer: **{pilihan_kontainer}**")
                   st.dataframe(df_sub_pilihan, use_container_width=True)
                 else:
-                  # Tampilkan Seluruh Kontainer
                   st.dataframe(df_detail, use_container_width=True)
 
                 st.write("---")
                 st.write("### 📂 Rincian Kartu Per Kontainer")
 
                 for kontainer in daftar_kontainer:
-                  df_sub = df_detail[df_detail[col_kontainer] == kontainer]
+                  df_sub = df_detail[df_detail[col_kontainer].astype(str) == str(kontainer)]
                   jumlah_item = len(df_sub)
 
-                  # Hitung total per kontainer jika ada nominal
                   sub_nominal = 0.0
                   if col_total:
-                    sub_nominal = (
-                        pd.to_numeric(
-                            df_sub[col_total]
-                            .astype(str)
-                            .str.replace(r"[^\d.]", "", regex=True),
-                            errors="coerce",
-                        )
-                        .sum()
-                    )
+                    sub_nominal = pd.to_numeric(
+                        df_sub[col_total].astype(str).str.replace(r"[^\d.]", "", regex=True),
+                        errors="coerce",
+                    ).sum()
                   sub_juta = sub_nominal / 1_000_000.0
 
                   label_expander = f"📦 Kontainer: {kontainer}  |  QTY Item: {jumlah_item}"
-                  if col_total:
+                  if col_total and sub_nominal > 0:
                     label_expander += f"  |  Total: Rp {sub_juta:,.2f} Juta"
 
                   with st.expander(label_expander):
@@ -254,7 +219,9 @@ if "faktur_items" in st.session_state:
                     )
               else:
                 st.warning(
-                    "Kolom pengelompokan kontainer belum terdeteksi secara otomatis."
+                    "⚠️ **Kolom pengelompokan kontainer belum terdeteksi secara otomatis.**\n\n"
+                    "Silakan periksa kotak biru **'Daftar Nama Kolom Asli dari API'** di atas "
+                    "dan sebutkan nama kolom mana yang berisi nomor/nama kontainer (seperti R2, S4, dll)."
                 )
                 st.dataframe(df_detail, use_container_width=True)
 
@@ -268,7 +235,7 @@ if "faktur_items" in st.session_state:
               )
 
             else:
-              st.info("Detail data diterima, tetapi format berupa JSON murni:")
+              st.info("Detail data diterima, tetapi format berupa JSON murni/kosong:")
               st.json(det_json)
           else:
             st.error(f"Gagal mengambil detail faktur. Status Code: {det_response.status_code}")
