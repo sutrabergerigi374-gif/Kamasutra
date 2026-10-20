@@ -13,11 +13,35 @@ st.write(
     " serta detail item per kontainer."
 )
 
+# Daftar Store ID yang diizinkan (Whitelist)
+ALLOWED_STORES = [
+    "M1U8",
+    "M953",
+    "M885",
+    "M1S6",
+    "M1S4",
+    "M750",
+    "M1Z4",
+    "M898",
+    "M888",
+    "M2A7",
+    "M1Z3",
+    "2MC5",
+    "M1T7",
+    "2M71",
+    "M2C1",
+    "M812",
+    "M1Z7",
+    "M1Y5",
+]
+
 # Sidebar / Form Input
 st.sidebar.header("Filter & Parameter Input")
-store_id = st.sidebar.text_input(
+store_id_input = st.sidebar.text_input(
     "Masukkan Store ID:", value="M888", help="Contoh: M888"
 )
+store_id = store_id_input.strip().upper()
+
 filter_val = st.sidebar.text_input(
     "Filter (Opsional):", value="", help="Nilai filter jika ada"
 )
@@ -60,33 +84,42 @@ def format_rupiah_murni(val):
 
 
 if st.sidebar.button("Muat Daftar Faktur"):
-  url = f"https://app.alfastore.co.id{endpoint_list}"
-  params = {"storeId": store_id, "filter": filter_val}
+  # Validasi Whitelist Store ID
+  if store_id not in ALLOWED_STORES:
+    st.error(
+        f"❌ **Akses Ditolak!** Store ID **'{store_id}'** tidak terdaftar"
+        " memiliki hak akses ke aplikasi ini."
+    )
+  else:
+    url = f"https://app.alfastore.co.id{endpoint_list}"
+    params = {"storeId": store_id, "filter": filter_val}
 
-  with st.spinner("Menghubungkan ke server..."):
-    try:
-      response = requests.get(url, headers=headers, params=params, timeout=15)
+    with st.spinner("Menghubungkan ke server..."):
+      try:
+        response = requests.get(url, headers=headers, params=params, timeout=15)
 
-      if response.status_code == 200:
-        res_json = response.json()
-        st.success(
-            f"Berhasil mengambil daftar faktur untuk Store ID: **{store_id}**"
-        )
+        if response.status_code == 200:
+          res_json = response.json()
+          st.success(
+              f"Berhasil mengambil daftar faktur untuk Store ID: **{store_id}**"
+          )
 
-        items = res_json.get("data", [])
+          items = res_json.get("data", [])
 
-        if isinstance(items, list) and len(items) > 0:
-          st.session_state["faktur_items"] = items
-          st.session_state["store_id"] = store_id
+          if isinstance(items, list) and len(items) > 0:
+            st.session_state["faktur_items"] = items
+            st.session_state["store_id"] = store_id
+          else:
+            st.warning("Data faktur kosong atau tidak ditemukan.")
+            st.json(res_json)
         else:
-          st.warning("Data faktur kosong atau tidak ditemukan.")
-          st.json(res_json)
-      else:
-        st.error(f"Gagal mengambil data. Status Code: {response.status_code}")
-        st.text(response.text)
+          st.error(
+              f"Gagal mengambil data. Status Code: {response.status_code}"
+          )
+          st.text(response.text)
 
-    except Exception as e:
-      st.error(f"Terjadi kesalahan koneksi: {e}")
+      except Exception as e:
+        st.error(f"Terjadi kesalahan koneksi: {e}")
 
 # Tampilkan data jika sudah dimuat
 if "faktur_items" in st.session_state:
@@ -207,7 +240,6 @@ if "faktur_items" in st.session_state:
                 st.markdown("---")
                 st.subheader("📂 Daftar Semua Kontainer (Kartu / Expander)")
 
-                # MEMBUNYIKAN / MENAMPILKAN KEMBALI DAFTAR LIST EXPANDER PER KONTAINER
                 for kontainer in daftar_kontainer:
                   df_sub_exp = df_detail[
                       df_detail["kontainer"].astype(str) == str(kontainer)
