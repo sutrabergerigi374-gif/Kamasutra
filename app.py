@@ -10,7 +10,7 @@ st.set_page_config(
 st.title("🚀 Alfastore - LOV Container & Detail PO")
 st.write(
     "Aplikasi untuk mengecek daftar faktur, ringkasan kontainer (LOV Container),"
-    " serta mengunduh data barang per kontainer."
+    " serta detail item per kontainer."
 )
 
 # Sidebar / Form Input
@@ -59,11 +59,6 @@ def format_rupiah_murni(val):
     return str(val)
 
 
-# Fungsi Konversi ke CSV yang Kompatibel dengan Excel Android
-def convert_df_to_csv(df):
-  return df.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig")
-
-
 if st.sidebar.button("Muat Daftar Faktur"):
   url = f"https://app.alfastore.co.id{endpoint_list}"
   params = {"storeId": store_id, "filter": filter_val}
@@ -106,7 +101,8 @@ if "faktur_items" in st.session_state:
   if "total_faktur" in df_list.columns:
     df_list["total_faktur"] = df_list["total_faktur"].apply(format_rupiah_murni)
 
-  st.dataframe(df_list, use_container_width=True)
+  # Menampilkan tabel tanpa kolom indeks (hide_index=True)
+  st.dataframe(df_list, use_container_width=True, hide_index=True)
 
   st.markdown("---")
   st.subheader("🔍 Lihat LOV Container & Isi PO")
@@ -138,6 +134,10 @@ if "faktur_items" in st.session_state:
 
             if isinstance(det_items, list) and len(det_items) > 0:
               df_detail = pd.DataFrame(det_items)
+
+              # Menghapus kolom 'conv2' jika ada dalam data
+              if "conv2" in df_detail.columns:
+                df_detail = df_detail.drop(columns=["conv2"])
 
               st.success(
                   f"Berhasil memuat LOV Container untuk PO: **{selected_faktur}**"
@@ -179,7 +179,10 @@ if "faktur_items" in st.session_state:
                 lov_summary.columns = ["Container", "Item", "Qty"]
 
                 st.subheader("📦 LOV CONTAINER (Ringkasan)")
-                st.dataframe(lov_summary, use_container_width=True)
+                # Menampilkan ringkasan tanpa kolom indeks
+                st.dataframe(
+                    lov_summary, use_container_width=True, hide_index=True
+                )
 
                 st.markdown("---")
                 st.subheader("🔍 Detail Item Per Kontainer")
@@ -198,28 +201,10 @@ if "faktur_items" in st.session_state:
                       f"Daftar Item dalam Kontainer: **{pilihan_kontainer}**"
                       f" (Total: {len(df_sub)} item)"
                   )
-                  st.dataframe(df_sub, use_container_width=True)
-
-                  # Download File Data Kontainer
-                  csv_sub = convert_df_to_csv(df_sub)
-                  st.download_button(
-                      label=f"📥 Download Data Kontainer {pilihan_kontainer}",
-                      data=csv_sub,
-                      file_name=(
-                          f"kontainer_{pilihan_kontainer}_{selected_faktur}.csv"
-                      ),
-                      mime="text/csv",
+                  # Menampilkan detail item per kontainer tanpa indeks & tanpa conv2
+                  st.dataframe(
+                      df_sub, use_container_width=True, hide_index=True
                   )
-
-              # Download Seluruh Faktur
-              st.markdown("---")
-              csv_all = convert_df_to_csv(df_detail)
-              st.download_button(
-                  label=f"📥 Download Seluruh Data Faktur {selected_faktur}",
-                  data=csv_all,
-                  file_name=f"detail_faktur_{selected_faktur}.csv",
-                  mime="text/csv",
-              )
 
             else:
               st.info("Detail data kosong.")
