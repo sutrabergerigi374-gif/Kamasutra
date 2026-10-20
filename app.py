@@ -61,7 +61,7 @@ headers = {
     "Version-App": "V.2024.10.15",
     "Version-Code": "11",
     "App-Uid": "10269",
-    "User-Id": "24123825",
+    "User-Id": "0",
     "Store-Id": store_id,
     "Api-Key": "iVOZX9MLmKrj1L8R23uF1aryMR1vGMXG",
     "Platform": "ANDROID",
