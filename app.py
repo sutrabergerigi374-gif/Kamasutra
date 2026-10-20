@@ -1,4 +1,3 @@
-import io
 import pandas as pd
 import requests
 import streamlit as st
@@ -11,7 +10,7 @@ st.set_page_config(
 st.title("🚀 Alfastore - LOV Container & Detail PO")
 st.write(
     "Aplikasi untuk mengecek daftar faktur, ringkasan kontainer (LOV Container),"
-    " serta mengunduh laporan dalam format Excel atau CSV."
+    " serta mengunduh data barang per kontainer."
 )
 
 # Sidebar / Form Input
@@ -60,14 +59,9 @@ def format_rupiah_murni(val):
     return str(val)
 
 
-# Fungsi Pembuat File Excel Multitab (.xlsx)
-def generate_excel(df_detail, df_summary):
-  buffer = io.BytesIO()
-  with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
-    if df_summary is not None and not df_summary.empty:
-      df_summary.to_excel(writer, sheet_name="LOV Container", index=False)
-    df_detail.to_excel(writer, sheet_name="Detail Items", index=False)
-  return buffer.getvalue()
+# Fungsi Konversi ke CSV yang Kompatibel dengan Excel Android
+def convert_df_to_csv(df):
+  return df.to_csv(index=False, encoding="utf-8-sig").encode("utf-8-sig")
 
 
 if st.sidebar.button("Muat Daftar Faktur"):
@@ -154,7 +148,6 @@ if "faktur_items" in st.session_state:
               col_m1.metric("Total Jenis Item", f"{len(df_detail)} PLU")
               col_m2.metric("Total Faktur", formatted_total_rp)
 
-              lov_summary = None
               if "kontainer" in df_detail.columns:
                 total_knt = len(df_detail["kontainer"].dropna().unique())
                 col_m3.metric("Total Kontainer", f"{total_knt} Kontainer")
@@ -207,35 +200,25 @@ if "faktur_items" in st.session_state:
                   )
                   st.dataframe(df_sub, use_container_width=True)
 
-                  # Download Excel Khusus Kontainer Terpilih
-                  excel_sub = generate_excel(df_sub, None)
+                  # Download File Data Kontainer
+                  csv_sub = convert_df_to_csv(df_sub)
                   st.download_button(
-                      label=(
-                          f"📊 Download Excel Kontainer {pilihan_kontainer}"
-                          " (.xlsx)"
-                      ),
-                      data=excel_sub,
+                      label=f"📥 Download Data Kontainer {pilihan_kontainer}",
+                      data=csv_sub,
                       file_name=(
-                          f"kontainer_{pilihan_kontainer}_{selected_faktur}.xlsx"
+                          f"kontainer_{pilihan_kontainer}_{selected_faktur}.csv"
                       ),
-                      mime=(
-                          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                      ),
+                      mime="text/csv",
                   )
 
-              # Download Excel Lengkap Seluruh Faktur (Multitab)
+              # Download Seluruh Faktur
               st.markdown("---")
-              excel_all = generate_excel(df_detail, lov_summary)
+              csv_all = convert_df_to_csv(df_detail)
               st.download_button(
-                  label=(
-                      f"📊 Download Excel Seluruh Faktur {selected_faktur}"
-                      " (.xlsx)"
-                  ),
-                  data=excel_all,
-                  file_name=f"detail_faktur_{selected_faktur}.xlsx",
-                  mime=(
-                      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-                  ),
+                  label=f"📥 Download Seluruh Data Faktur {selected_faktur}",
+                  data=csv_all,
+                  file_name=f"detail_faktur_{selected_faktur}.csv",
+                  mime="text/csv",
               )
 
             else:
