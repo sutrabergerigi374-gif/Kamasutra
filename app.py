@@ -4,19 +4,19 @@ import streamlit as st
 
 # Konfigurasi Halaman Streamlit
 st.set_page_config(
-    page_title="CEXP-CLOUD Faktur & Kontainer Viewer", page_icon="🌐", layout="wide"
+    page_title="CEXP-CLOUD LOV Container Viewer", page_icon="📦", layout="wide"
 )
 
-st.title("🚀 Alfastore - Data Faktur & Kontainer LPB")
+st.title("🚀 Alfastore - LOV Container & Detail PO")
 st.write(
-    "Aplikasi untuk mengecek daftar faktur, melihat total faktur (Rupiah),"
-    " dan isi per kontainer."
+    "Aplikasi untuk mengecek daftar faktur, ringkasan kontainer (LOV Container),"
+    " serta melihat item di dalam setiap kontainer."
 )
 
 # Sidebar / Form Input
 st.sidebar.header("Filter & Parameter Input")
 store_id = st.sidebar.text_input(
-    "Masukkan Store ID:", value="M1Z7", help="Contoh: M1Z7"
+    "Masukkan Store ID:", value="M888", help="Contoh: M888"
 )
 filter_val = st.sidebar.text_input(
     "Filter (Opsional):", value="", help="Nilai filter jika ada"
@@ -24,29 +24,34 @@ filter_val = st.sidebar.text_input(
 
 # Endpoint API
 endpoint_list = "/prd/api/lpb/tablet/lpb/get_faktur/"
-endpoint_detail = "/prd/api/lpb/tablet/lpb/TotalFaktur/"
+endpoint_detail = "/to/api/lpb/tablet/lpb/detail_faktur_unchecking/"
 
-# Header API
+# Header API sesuai spesifikasi POST terbaru
 headers = {
     "User-Agent": (
-        "Mozilla/5.0 (Linux; Android 11; Mobile) AppleWebKit/537.36 (KHTML,"
-        " like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36"
+        "Dalvik/2.1.0 (Linux; U; Android 11; RMX1971 Build/RKQ1.201217.002)"
     ),
-    "Accept": "application/json, text/plain, */*",
+    "Accept": "application/json",
+    "Content-Type": "application/json",
+    "App-Name": "LPB-CLOUD",
+    "Version-App": "V.2024.10.15",
+    "Version-Code": "11",
+    "App-Uid": "10269",
+    "User-Id": "24123825",
+    "Store-Id": store_id,
     "Api-Key": "iVOZX9MLmKrj1L8R23uF1aryMR1vGMXG",
-    "x-api-key": "iVOZX9MLmKrj1L8R23uF1aryMR1vGMXG",
-    "App-Name": "CEXP-CLOUD",
     "Platform": "ANDROID",
+    "Host": "app.alfastore.co.id",
+    "Connection": "Keep-Alive",
     "Accept-Encoding": "gzip",
 }
 
 
-# Fungsi Format Rupiah Presisi (17663374 -> Rp 17.663.374)
+# Fungsi Format Rupiah Presisi
 def format_rupiah_murni(val):
   try:
     if pd.isna(val) or val == "":
-      return "-"
-    # Ambil hanya angka
+      return "Rp 0"
     clean_val = str(val).split(".")[0]
     num = int("".join(filter(str.isdigit, clean_val)))
     return f"Rp {num:,}".replace(",", ".")
@@ -93,57 +98,52 @@ if "faktur_items" in st.session_state:
 
   df_list = pd.DataFrame(items)
 
-  # Format kolom total_faktur ke format Rupiah
   if "total_faktur" in df_list.columns:
     df_list["total_faktur"] = df_list["total_faktur"].apply(format_rupiah_murni)
 
   st.dataframe(df_list, use_container_width=True)
 
   st.markdown("---")
-  st.subheader("🔍 Lihat Isi / Detail PO")
+  st.subheader("🔍 Lihat LOV Container & Isi PO")
 
   list_faktur = [item.get("faktur") for item in items if "faktur" in item]
 
   if list_faktur:
     selected_faktur = st.selectbox(
-        "Pilih Nomor Faktur yang ingin dilihat isinya:", list_faktur
+        "Pilih Nomor Faktur:", list_faktur
     )
 
-    if st.button("👁️ View / Lihat Isi Faktur"):
+    selected_row = next(
+        (item for item in items if item.get("faktur") == selected_faktur), {}
+    )
+    raw_total_faktur = selected_row.get("total_faktur", 0)
+    formatted_total_rp = format_rupiah_murni(raw_total_faktur)
+
+    if st.button("👁️ Buka LOV Container / Lihat Isi"):
       detail_url = f"https://app.alfastore.co.id{endpoint_detail}"
       detail_params = {"storeId": current_store, "faktur": selected_faktur}
 
-      with st.spinner(f"Mengambil isi detail faktur {selected_faktur}..."):
+      with st.spinner(f"Memuat LOV Container untuk Faktur {selected_faktur}..."):
         try:
-          det_response = requests.get(
+          det_response = requests.post(
               detail_url, headers=headers, params=detail_params, timeout=15
           )
 
           if det_response.status_code == 200:
             det_json = det_response.json()
-
-            det_items = (
-                det_json.get("data", det_json)
-                if isinstance(det_json, dict)
-                else det_json
-            )
+            det_items = det_json.get("data", [])
 
             if isinstance(det_items, list) and len(det_items) > 0:
               df_detail = pd.DataFrame(det_items)
 
               st.success(
-                  f"Berhasil memuat detail PO: **{selected_faktur}**"
+                  f"Berhasil memuat LOV Container untuk PO: **{selected_faktur}**"
               )
 
-              # Hitung Total Nominal Rupiah dari kolom total_faktur jika ada
-              nominal_rp_str = "-"
-              if "total_faktur" in df_detail.columns:
-                raw_val = df_detail["total_faktur"].iloc[0]
-                nominal_rp_str = format_rupiah_murni(raw_val)
-
+              # Ringkasan Metrik
               col_m1, col_m2, col_m3 = st.columns(3)
-              col_m1.metric("Total Jenis Item", f"{len(df_detail)} Item/PLU")
-              col_m2.metric("Total Faktur", nominal_rp_str)
+              col_m1.metric("Total Jenis Item", f"{len(df_detail)} PLU")
+              col_m2.metric("Total Faktur", formatted_total_rp)
 
               if "kontainer" in df_detail.columns:
                 total_knt = len(df_detail["kontainer"].dropna().unique())
@@ -153,62 +153,90 @@ if "faktur_items" in st.session_state:
 
               st.markdown("---")
 
-              # Menampilkan Kontainer
+              # --- MEMBUAT TABEL RINGKASAN LOV CONTAINER (MIRIP GAMBAR) ---
               if "kontainer" in df_detail.columns:
-                daftar_kontainer = df_detail["kontainer"].dropna().unique()
-
-                st.subheader("📦 Daftar Kontainer")
-
-                pilihan_kontainer = st.selectbox(
-                    "Pilih Kontainer Spesifik:",
-                    ["Semua Kontainer"] + [str(k) for k in daftar_kontainer],
+                # Kolom QTY (gunakan qty_ship atau qty_pick jika ada)
+                qty_col = (
+                    "qty_ship"
+                    if "qty_ship" in df_detail.columns
+                    else (
+                        "qty_pick"
+                        if "qty_pick" in df_detail.columns
+                        else df_detail.columns[0]
+                    )
                 )
 
-                if pilihan_kontainer != "Semua Kontainer":
-                  df_sub_pilihan = df_detail[
+                # Agregasi per kontainer (Container | Item | Qty)
+                lov_summary = (
+                    df_detail.groupby("kontainer")
+                    .agg(
+                        Item=("plu", "count"),
+                        Qty=(qty_col, "sum"),
+                    )
+                    .reset_index()
+                )
+                lov_summary.columns = ["Container", "Item", "Qty"]
+
+                st.subheader("📦 LOV CONTAINER (Ringkasan)")
+                st.dataframe(lov_summary, use_container_width=True)
+
+                st.markdown("---")
+                st.subheader(
+                    "🔍 Pilih Kontainer untuk Melihat Detail Item di Dalamnya"
+                )
+
+                daftar_kontainer = lov_summary["Container"].tolist()
+
+                # Pilihan kontainer interaktif (bisa dipilih untuk memunculkan item)
+                pilihan_kontainer = st.selectbox(
+                    "Pilih Kontainer:", daftar_kontainer
+                )
+
+                if pilihan_kontainer:
+                  df_sub = df_detail[
                       df_detail["kontainer"].astype(str)
                       == str(pilihan_kontainer)
                   ]
-                  st.write(
-                      f"### 📥 Isi Kontainer: **{pilihan_kontainer}**"
+                  st.info(
+                      f"Daftar Item dalam Kontainer: **{pilihan_kontainer}**"
+                      f" (Total: {len(df_sub)} item)"
                   )
-                  st.dataframe(df_sub_pilihan, use_container_width=True)
-                else:
-                  st.dataframe(df_detail, use_container_width=True)
+                  st.dataframe(df_sub, use_container_width=True)
 
-                st.write("---")
-                st.write("### 📂 Detail Per Kontainer")
+                  # Tombol Download CSV per kontainer
+                  csv_sub = df_sub.to_csv(index=False).encode("utf-8")
+                  st.download_button(
+                      label=(
+                          f"📥 Download Kontainer {pilihan_kontainer} (CSV)"
+                      ),
+                      data=csv_sub,
+                      file_name=(
+                          f"kontainer_{pilihan_kontainer}_{selected_faktur}.csv"
+                      ),
+                      mime="text/csv",
+                  )
 
+                st.markdown("---")
+                st.write("### 📂 Rincian Kartu Per Kontainer (Expander)")
                 for kontainer in daftar_kontainer:
                   df_sub = df_detail[
                       df_detail["kontainer"].astype(str) == str(kontainer)
                   ]
-                  jumlah_item = len(df_sub)
+                  jml_item = len(df_sub)
+                  total_qty_sub = pd.to_numeric(
+                      df_sub[qty_col], errors="coerce"
+                  ).sum()
 
-                  label_expander = (
-                      f"📦 {kontainer}  |  qty {jumlah_item} item"
-                  )
-
-                  with st.expander(label_expander):
-                    st.write(f"**Isi Kontainer: {kontainer}**")
+                  with st.expander(
+                      f"📦 Container: {kontainer}  |  Item: {jml_item}  |  Qty:"
+                      f" {total_qty_sub:,.0f}"
+                  ):
                     st.dataframe(df_sub, use_container_width=True)
-
-                    csv_sub = df_sub.to_csv(index=False).encode("utf-8")
-                    st.download_button(
-                        label=f"📥 Download Isi Kontainer {kontainer} (CSV)",
-                        data=csv_sub,
-                        file_name=(
-                            f"kontainer_{kontainer}_{selected_faktur}.csv"
-                        ),
-                        mime="text/csv",
-                        key=f"dl_{kontainer}",
-                    )
               else:
-                st.warning(
-                    "Data barang/kontainer belum terpisah pada response ini."
-                )
+                st.warning("Kolom kontainer tidak ditemukan pada data API.")
                 st.dataframe(df_detail, use_container_width=True)
 
+              # Tombol Download Seluruh Faktur
               csv_data = df_detail.to_csv(index=False).encode("utf-8")
               st.download_button(
                   label=(
@@ -221,7 +249,8 @@ if "faktur_items" in st.session_state:
 
             else:
               st.info(
-                  "Detail data diterima, tetapi format berupa JSON murni/kosong:"
+                  "Detail data diterima, tetapi format key 'data' kosong atau"
+                  " tidak dikenali:"
               )
               st.json(det_json)
           else:
