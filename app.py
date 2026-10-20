@@ -1,6 +1,7 @@
 import pandas as pd
 import requests
 import streamlit as st
+from fpdf import FPDF
 
 # Konfigurasi Halaman Streamlit
 st.set_page_config(
@@ -10,7 +11,7 @@ st.set_page_config(
 st.title("🚀 Alfastore - LOV Container & Detail PO")
 st.write(
     "Aplikasi untuk mengecek daftar faktur, ringkasan kontainer (LOV Container),"
-    " serta melihat item di dalam setiap kontainer."
+    " serta mengunduh laporan dalam format PDF atau CSV."
 )
 
 # Sidebar / Form Input
@@ -26,7 +27,7 @@ filter_val = st.sidebar.text_input(
 endpoint_list = "/prd/api/lpb/tablet/lpb/get_faktur/"
 endpoint_detail = "/to/api/lpb/tablet/lpb/detail_faktur_unchecking/"
 
-# Header API sesuai spesifikasi POST terbaru
+# Header API
 headers = {
     "User-Agent": (
         "Dalvik/2.1.0 (Linux; U; Android 11; RMX1971 Build/RKQ1.201217.002)"
@@ -47,7 +48,7 @@ headers = {
 }
 
 
-# Fungsi Format Rupiah Presisi
+# Fungsi Format Rupiah
 def format_rupiah_murni(val):
   try:
     if pd.isna(val) or val == "":
@@ -57,6 +58,54 @@ def format_rupiah_murni(val):
     return f"Rp {num:,}".replace(",", ".")
   except Exception:
     return str(val)
+
+
+# Fungsi Pembuat PDF
+def generate_pdf(df, title_text):
+  pdf = FPDF(orientation="P", unit="mm", format="A4")
+  pdf.add_page()
+  pdf.set_font("Helvetica", "B", 14)
+
+  # Judul Laporan
+  pdf.cell(0, 10, title_text, ln=True, align="C")
+  pdf.ln(5)
+
+  # Header Tabel
+  pdf.set_font("Helvetica", "B", 9)
+  pdf.set_fill_color(230, 230, 230)
+
+  col_widths = [15, 25, 25, 95, 20]  # No, Kontainer, PLU, Deskripsi, Qty
+
+  pdf.cell(col_widths[0], 8, "No", border=1, align="C", fill=True)
+  pdf.cell(col_widths[1], 8, "Kontainer", border=1, align="C", fill=True)
+  pdf.cell(col_widths[2], 8, "PLU", border=1, align="C", fill=True)
+  pdf.cell(col_widths[3], 8, "Deskripsi Barang", border=1, align="C", fill=True)
+  pdf.cell(col_widths[4], 8, "Qty", border=1, align="C", fill=True)
+  pdf.ln()
+
+  # Isi Tabel
+  pdf.set_font("Helvetica", "", 8)
+  qty_col = (
+      "qty_ship"
+      if "qty_ship" in df.columns
+      else ("qty_pick" if "qty_pick" in df.columns else df.columns[0])
+  )
+
+  for i, row in df.reset_index(drop=True).iterrows():
+    kontainer_val = str(row.get("kontainer", "-"))
+    plu_val = str(int(row.get("plu", 0))) if pd.notna(row.get("plu")) else "-"
+    descp_val = str(row.get("descp", "-"))[:45]  # Potong jika terlalu panjang
+    qty_val = str(int(row.get(qty_col, 0)))
+
+    pdf.cell(col_widths[0], 7, str(i + 1), border=1, align="C")
+    pdf.cell(col_widths[1], 7, kontainer_val, border=1, align="C")
+    pdf.cell(col_widths[2], 7, plu_val, border=1, align="C")
+    pdf.cell(col_widths[3], 7, descp_val, border=1, align="L")
+    pdf.cell(col_widths[4], 7, qty_val, border=1, align="C")
+    pdf.ln()
+
+  # Output Bytes
+  return bytes(pdf.output())
 
 
 if st.sidebar.button("Muat Daftar Faktur"):
@@ -88,7 +137,7 @@ if st.sidebar.button("Muat Daftar Faktur"):
     except Exception as e:
       st.error(f"Terjadi kesalahan koneksi: {e}")
 
-# Tampilkan tabel daftar faktur jika sudah dimuat
+# Tampilkan data jika sudah dimuat
 if "faktur_items" in st.session_state:
   items = st.session_state["faktur_items"]
   current_store = st.session_state["store_id"]
@@ -153,9 +202,8 @@ if "faktur_items" in st.session_state:
 
               st.markdown("---")
 
-              # --- MEMBUAT TABEL RINGKASAN LOV CONTAINER (MIRIP GAMBAR) ---
+              # Ringkasan LOV Container
               if "kontainer" in df_detail.columns:
-                # Kolom QTY (gunakan qty_ship atau qty_pick jika ada)
                 qty_col = (
                     "qty_ship"
                     if "qty_ship" in df_detail.columns
@@ -166,7 +214,6 @@ if "faktur_items" in st.session_state:
                     )
                 )
 
-                # Agregasi per kontainer (Container | Item | Qty)
                 lov_summary = (
                     df_detail.groupby("kontainer")
                     .agg(
@@ -181,13 +228,9 @@ if "faktur_items" in st.session_state:
                 st.dataframe(lov_summary, use_container_width=True)
 
                 st.markdown("---")
-                st.subheader(
-                    "🔍 Pilih Kontainer untuk Melihat Detail Item di Dalamnya"
-                )
+                st.subheader("🔍 Detail Item Per Kontainer")
 
                 daftar_kontainer = lov_summary["Container"].tolist()
-
-                # Pilihan kontainer interaktif (bisa dipilih untuk memunculkan item)
                 pilihan_kontainer = st.selectbox(
                     "Pilih Kontainer:", daftar_kontainer
                 )
@@ -203,69 +246,38 @@ if "faktur_items" in st.session_state:
                   )
                   st.dataframe(df_sub, use_container_width=True)
 
-                  # Tombol Download CSV per kontainer
-                  csv_sub = df_sub.to_csv(index=False).encode("utf-8")
+                  # Tombol Download PDF per Kontainer
+                  pdf_sub_bytes = generate_pdf(
+                      df_sub,
+                      f"Laporan Kontainer {pilihan_kontainer} - {selected_faktur}",
+                  )
                   st.download_button(
                       label=(
-                          f"📥 Download Kontainer {pilihan_kontainer} (CSV)"
+                          f"📄 Download PDF Kontainer {pilihan_kontainer}"
                       ),
-                      data=csv_sub,
+                      data=pdf_sub_bytes,
                       file_name=(
-                          f"kontainer_{pilihan_kontainer}_{selected_faktur}.csv"
+                          f"kontainer_{pilihan_kontainer}_{selected_faktur}.pdf"
                       ),
-                      mime="text/csv",
+                      mime="application/pdf",
                   )
 
-                st.markdown("---")
-                st.write("### 📂 Rincian Kartu Per Kontainer (Expander)")
-                for kontainer in daftar_kontainer:
-                  df_sub = df_detail[
-                      df_detail["kontainer"].astype(str) == str(kontainer)
-                  ]
-                  jml_item = len(df_sub)
-                  total_qty_sub = pd.to_numeric(
-                      df_sub[qty_col], errors="coerce"
-                  ).sum()
-
-                  with st.expander(
-                      f"📦 Container: {kontainer}  |  Item: {jml_item}  |  Qty:"
-                      f" {total_qty_sub:,.0f}"
-                  ):
-                    st.dataframe(df_sub, use_container_width=True)
-              else:
-                st.warning("Kolom kontainer tidak ditemukan pada data API.")
-                st.dataframe(df_detail, use_container_width=True)
-
-              # Tombol Download Seluruh Faktur
-              csv_data = df_detail.to_csv(index=False).encode("utf-8")
+              # Tombol Download PDF Seluruh Faktur
+              st.markdown("---")
+              pdf_all_bytes = generate_pdf(
+                  df_detail, f"Detail Faktur / PO: {selected_faktur}"
+              )
               st.download_button(
-                  label=(
-                      f"📥 Download Seluruh Isi Faktur {selected_faktur} (CSV)"
-                  ),
-                  data=csv_data,
-                  file_name=f"detail_faktur_{selected_faktur}.csv",
-                  mime="text/csv",
+                  label=f"📄 Download PDF Seluruh Faktur {selected_faktur}",
+                  data=pdf_all_bytes,
+                  file_name=f"detail_faktur_{selected_faktur}.pdf",
+                  mime="application/pdf",
               )
 
             else:
-              st.info(
-                  "Detail data diterima, tetapi format key 'data' kosong atau"
-                  " tidak dikenali:"
-              )
-              st.json(det_json)
+              st.info("Detail data kosong.")
           else:
-            st.error(
-                "Gagal mengambil detail faktur. Status Code:"
-                f" {det_response.status_code}"
-            )
-            st.text(det_response.text)
+            st.error(f"Gagal mengambil detail. Status: {det_response.status_code}")
 
         except Exception as e:
-          st.error(f"Terjadi kesalahan koneksi saat mengambil detail: {e}")
-  else:
-    st.info("Tidak ada faktur yang tersedia untuk dipilih.")
-else:
-  st.info(
-      "Silakan masukkan Store ID di panel sebelah kiri, lalu klik **Muat Daftar"
-      " Faktur** terlebih dahulu."
-  )
+          st.error(f"Terjadi kesalahan: {e}")
