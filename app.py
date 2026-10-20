@@ -66,7 +66,7 @@ headers = {
     "Version-App": "V.2024.10.15",
     "Version-Code": "11",
     "App-Uid": "10269",
-    "User-Id": "24123825",
+    "User-Id": "0",
     "Store-Id": store_id,
     "Api-Key": "iVOZX9MLmKrj1L8R23uF1aryMR1vGMXG",
     "Platform": "ANDROID",
@@ -170,93 +170,9 @@ if "faktur_items" in st.session_state:
               if "conv2" in df_detail.columns:
                 df_detail = df_detail.drop(columns=["conv2"])
 
-              st.success(
-                  f"Berhasil memuat LOV Container untuk PO: **{selected_faktur}**"
-              )
-
-              # Ringkasan Metrik
-              col_m1, col_m2, col_m3 = st.columns(3)
-              col_m1.metric("Total Jenis Item", f"{len(df_detail)} PLU")
-              col_m2.metric("Total Faktur", formatted_total_rp)
-
-              if "kontainer" in df_detail.columns:
-                total_knt = len(df_detail["kontainer"].dropna().unique())
-                col_m3.metric("Total Kontainer", f"{total_knt} Kontainer")
-              else:
-                col_m3.metric("Total Kontainer", "-")
-
-              st.markdown("---")
-
-              # Ringkasan LOV Container
-              if "kontainer" in df_detail.columns:
-                qty_col = (
-                    "qty_ship"
-                    if "qty_ship" in df_detail.columns
-                    else (
-                        "qty_pick"
-                        if "qty_pick" in df_detail.columns
-                        else df_detail.columns[0]
-                    )
-                )
-
-                lov_summary = (
-                    df_detail.groupby("kontainer")
-                    .agg(
-                        Item=("plu", "count"),
-                        Qty=(qty_col, "sum"),
-                    )
-                    .reset_index()
-                )
-                lov_summary.columns = ["Container", "Item", "Qty"]
-
-                st.subheader("📦 LOV CONTAINER (Ringkasan)")
-                st.dataframe(
-                    lov_summary, use_container_width=True, hide_index=True
-                )
-
-                st.markdown("---")
-                st.subheader("🔍 Detail Item Per Kontainer (Dropdown / Filter)")
-
-                daftar_kontainer = lov_summary["Container"].tolist()
-                pilihan_kontainer = st.selectbox(
-                    "Pilih Kontainer Spesifik:", daftar_kontainer
-                )
-
-                if pilihan_kontainer:
-                  df_sub = df_detail[
-                      df_detail["kontainer"].astype(str)
-                      == str(pilihan_kontainer)
-                  ]
-                  st.info(
-                      f"Daftar Item dalam Kontainer: **{pilihan_kontainer}**"
-                      f" (Total: {len(df_sub)} item)"
-                  )
-                  st.dataframe(
-                      df_sub, use_container_width=True, hide_index=True
-                  )
-
-                st.markdown("---")
-                st.subheader("📂 Daftar Semua Kontainer (Kartu / Expander)")
-
-                for kontainer in daftar_kontainer:
-                  df_sub_exp = df_detail[
-                      df_detail["kontainer"].astype(str) == str(kontainer)
-                  ]
-                  jml_item = len(df_sub_exp)
-                  total_qty_sub = pd.to_numeric(
-                      df_sub_exp[qty_col], errors="coerce"
-                  ).sum()
-
-                  label_expander = (
-                      f"📦 Container: {kontainer}  |  Item: {jml_item}  |  Qty:"
-                      f" {total_qty_sub:,.0f}"
-                  )
-
-                  with st.expander(label_expander):
-                    st.dataframe(
-                        df_sub_exp, use_container_width=True, hide_index=True
-                    )
-
+              st.session_state["df_detail"] = df_detail
+              st.session_state["faktur_active"] = selected_faktur
+              st.session_state["formatted_total_rp"] = formatted_total_rp
             else:
               st.info("Detail data kosong.")
           else:
@@ -266,6 +182,128 @@ if "faktur_items" in st.session_state:
 
         except Exception as e:
           st.error(f"Terjadi kesalahan: {e}")
+
+    # Tampilkan Detail jika sudah dimuat dalam session state
+    if "df_detail" in st.session_state and st.session_state.get("faktur_active") == selected_faktur:
+      df_detail = st.session_state["df_detail"]
+      formatted_total_rp = st.session_state["formatted_total_rp"]
+
+      st.success(
+          f"Berhasil memuat LOV Container untuk PO: **{selected_faktur}**"
+      )
+
+      # Ringkasan Metrik
+      col_m1, col_m2, col_m3 = st.columns(3)
+      col_m1.metric("Total Jenis Item", f"{len(df_detail)} PLU")
+      col_m2.metric("Total Faktur", formatted_total_rp)
+
+      if "kontainer" in df_detail.columns:
+        total_knt = len(df_detail["kontainer"].dropna().unique())
+        col_m3.metric("Total Kontainer", f"{total_knt} Kontainer")
+      else:
+        col_m3.metric("Total Kontainer", "-")
+
+      st.markdown("---")
+
+      # =========================================================
+      # FITUR 1: PENCARIAN PLU & NAMA BARANG (DESCP)
+      # =========================================================
+      st.subheader("🔍 Cari Lokasi Kontainer Barang")
+      search_query = st.text_input(
+          "🔎 Cari PLU atau Nama Barang (Descp):",
+          value="",
+          placeholder="Ketik kode PLU atau nama barang (misal: Indomie)...",
+      )
+
+      if search_query.strip():
+        q = search_query.strip().lower()
+        
+        # Filter berdasarkan PLU atau deskripsi barang
+        mask = pd.Series(False, index=df_detail.index)
+        if "plu" in df_detail.columns:
+          mask = mask | df_detail["plu"].astype(str).str.lower().str.contains(q)
+        if "descp" in df_detail.columns:
+          mask = mask | df_detail["descp"].astype(str).str.lower().str.contains(q)
+
+        df_search_res = df_detail[mask]
+
+        if not df_search_res.empty:
+          st.success(f"Ditemukan **{len(df_search_res)}** item hasil pencarian:")
+          st.dataframe(df_search_res, use_container_width=True, hide_index=True)
+        else:
+          st.warning(f"Barang dengan kata kunci **'{search_query}'** tidak ditemukan pada PO ini.")
+        st.markdown("---")
+
+      # Ringkasan LOV Container
+      if "kontainer" in df_detail.columns:
+        qty_col = (
+            "qty_ship"
+            if "qty_ship" in df_detail.columns
+            else (
+                "qty_pick"
+                if "qty_pick" in df_detail.columns
+                else df_detail.columns[0]
+            )
+        )
+
+        lov_summary = (
+            df_detail.groupby("kontainer")
+            .agg(
+                Item=("plu", "count"),
+                Qty=(qty_col, "sum"),
+            )
+            .reset_index()
+        )
+        lov_summary.columns = ["Container", "Item", "Qty"]
+
+        st.subheader("📦 LOV CONTAINER (Ringkasan)")
+        st.dataframe(
+            lov_summary, use_container_width=True, hide_index=True
+        )
+
+        st.markdown("---")
+        st.subheader("🔍 Detail Item Per Kontainer (Dropdown / Filter)")
+
+        daftar_kontainer = lov_summary["Container"].tolist()
+        pilihan_kontainer = st.selectbox(
+            "Pilih Kontainer Spesifik:", daftar_kontainer
+        )
+
+        if pilihan_kontainer:
+          df_sub = df_detail[
+              df_detail["kontainer"].astype(str)
+              == str(pilihan_kontainer)
+          ]
+          st.info(
+              f"Daftar Item dalam Kontainer: **{pilihan_kontainer}**"
+              f" (Total: {len(df_sub)} item)"
+          )
+          st.dataframe(
+              df_sub, use_container_width=True, hide_index=True
+          )
+
+        st.markdown("---")
+        st.subheader("📂 Daftar Semua Kontainer (Kartu / Expander)")
+
+        for kontainer in daftar_kontainer:
+          df_sub_exp = df_detail[
+              df_detail["kontainer"].astype(str) == str(kontainer)
+          ]
+          jml_item = len(df_sub_exp)
+          total_qty_sub = pd.to_numeric(
+              df_sub_exp[qty_col], errors="coerce"
+          ).sum()
+
+          label_expander = (
+              f"📦 Container: {kontainer}  |  Item: {jml_item}  |  Qty:"
+              f" {total_qty_sub:,.0f}"
+          )
+
+          with st.expander(label_expander):
+            st.dataframe(
+                df_sub_exp, use_container_width=True, hide_index=True
+            )
+
   else:
     st.info("Tidak ada faktur yang tersedia untuk dipilih.")
 else:
