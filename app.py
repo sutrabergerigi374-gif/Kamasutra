@@ -13,34 +13,39 @@ st.write(
     " serta detail item per kontainer."
 )
 
-# Daftar Store ID yang diizinkan (Whitelist)
-ALLOWED_STORES = [
-    "M1U8",
-    "M953",
-    "M885",
-    "M1S6",
-    "M1S4",
-    "M750",
-    "M1Z4",
-    "M898",
-    "M888",
-    "M2A7",
-    "M1Z3",
-    "2MC5",
-    "M1T7",
-    "2M71",
-    "M2C1",
-    "M812",
-    "M1Z7",
-    "M1Y5",
-]
+# Kamus / Dictionary Store ID lan Nama Toko
+STORE_OPTIONS = {
+    "M1U8": "M1U8 - KARANGTALUN TLA",
+    "M953": "M953 - KALIDAWIR TLG",
+    "M885": "M885 - JABON TULUNGAGUNG",
+    "M1S6": "M1S6 - NGUNUT KRAJAN TLA",
+    "M1S4": "M1S4 - TUGU TULUNGAGUNG",
+    "M750": "M750 - KALANGAN TULUNGAGUNG",
+    "M1Z4": "M1Z4 - PAKISREJO TLA",
+    "M898": "M898 - KALIWUNGU T.A",
+    "M888": "M888 - KACANGAN TULUNGAGUNG",
+    "M2A7": "M2A7 - PANDEAN TLA",
+    "M1Z3": "M1Z3 - KSO+ NGUNUT",
+    "2MC5": "2MC5 - NGUNUT BARU TLA",
+    "M1T7": "M1T7 - SAMBIDOPLANG TLA",
+    "M2C1": "M2C1 - SUMBERAGUNG TLA",
+    "M812": "M812 - REJOTANGAN TLG",
+    "M1Z7": "M1Z7 - SELOREJO TLA",
+    "2M71": "2M71 - KALIWUNGU BARU",
+    "M1Y5": "M1Y5 - BALESONO TLA",
+}
 
-# Sidebar / Form Input
+# Sidebar / Form Input mawi Selectbox (Dropdown)
 st.sidebar.header("Filter & Parameter Input")
-store_id_input = st.sidebar.text_input(
-    "Masukkan Store ID:", value="M888", help="Contoh: M888"
+
+selected_store_label = st.sidebar.selectbox(
+    "Pilih Toko (Store ID):",
+    options=list(STORE_OPTIONS.values()),
+    index=8,  # Default M888 KACANGAN TULUNGAGUNG
 )
-store_id = store_id_input.strip().upper()
+
+# Mengambil Kode Store ID (4 karakter pertama)
+store_id = selected_store_label.split(" - ")[0]
 
 filter_val = st.sidebar.text_input(
     "Filter (Opsional):", value="", help="Nilai filter jika ada"
@@ -61,7 +66,7 @@ headers = {
     "Version-App": "V.2024.10.15",
     "Version-Code": "11",
     "App-Uid": "10269",
-    "User-Id": "0",
+    "User-Id": "24123825",
     "Store-Id": store_id,
     "Api-Key": "iVOZX9MLmKrj1L8R23uF1aryMR1vGMXG",
     "Platform": "ANDROID",
@@ -84,50 +89,43 @@ def format_rupiah_murni(val):
 
 
 if st.sidebar.button("Muat Daftar Faktur"):
-  # Validasi Whitelist Store ID
-  if store_id not in ALLOWED_STORES:
-    st.error(
-        f"❌ **Akses Ditolak!** Store ID **'{store_id}'** tidak terdaftar"
-        " memiliki hak akses ke aplikasi ini."
-    )
-  else:
-    url = f"https://app.alfastore.co.id{endpoint_list}"
-    params = {"storeId": store_id, "filter": filter_val}
+  url = f"https://app.alfastore.co.id{endpoint_list}"
+  params = {"storeId": store_id, "filter": filter_val}
 
-    with st.spinner("Menghubungkan ke server..."):
-      try:
-        response = requests.get(url, headers=headers, params=params, timeout=15)
+  with st.spinner("Menghubungkan ke server..."):
+    try:
+      response = requests.get(url, headers=headers, params=params, timeout=15)
 
-        if response.status_code == 200:
-          res_json = response.json()
-          st.success(
-              f"Berhasil mengambil daftar faktur untuk Store ID: **{store_id}**"
-          )
+      if response.status_code == 200:
+        res_json = response.json()
+        st.success(
+            f"Berhasil mengambil daftar faktur untuk Store: **{selected_store_label}**"
+        )
 
-          items = res_json.get("data", [])
+        items = res_json.get("data", [])
 
-          if isinstance(items, list) and len(items) > 0:
-            st.session_state["faktur_items"] = items
-            st.session_state["store_id"] = store_id
-          else:
-            st.warning("Data faktur kosong atau tidak ditemukan.")
-            st.json(res_json)
+        if isinstance(items, list) and len(items) > 0:
+          st.session_state["faktur_items"] = items
+          st.session_state["store_id"] = store_id
+          st.session_state["store_label"] = selected_store_label
         else:
-          st.error(
-              f"Gagal mengambil data. Status Code: {response.status_code}"
-          )
-          st.text(response.text)
+          st.warning("Data faktur kosong atau tidak ditemukan.")
+          st.json(res_json)
+      else:
+        st.error(f"Gagal mengambil data. Status Code: {response.status_code}")
+        st.text(response.text)
 
-      except Exception as e:
-        st.error(f"Terjadi kesalahan koneksi: {e}")
+    except Exception as e:
+      st.error(f"Terjadi kesalahan koneksi: {e}")
 
 # Tampilkan data jika sudah dimuat
 if "faktur_items" in st.session_state:
   items = st.session_state["faktur_items"]
   current_store = st.session_state["store_id"]
+  current_label = st.session_state.get("store_label", current_store)
 
   st.markdown("---")
-  st.subheader("📋 PO Kiriman (Daftar Faktur)")
+  st.subheader(f"📋 PO Kiriman ({current_label})")
 
   df_list = pd.DataFrame(items)
 
@@ -272,6 +270,6 @@ if "faktur_items" in st.session_state:
     st.info("Tidak ada faktur yang tersedia untuk dipilih.")
 else:
   st.info(
-      "Silakan masukkan Store ID di panel sebelah kiri, lalu klik **Muat Daftar"
+      "Silakan pilih Toko di panel sebelah kiri, lalu klik **Muat Daftar"
       " Faktur** terlebih dahulu."
   )
