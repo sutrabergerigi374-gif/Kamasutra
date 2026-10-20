@@ -101,7 +101,7 @@ if "faktur_items" in st.session_state:
   if "total_faktur" in df_list.columns:
     df_list["total_faktur"] = df_list["total_faktur"].apply(format_rupiah_murni)
 
-  # Menampilkan tabel tanpa kolom indeks (hide_index=True)
+  # Menampilkan tabel daftar faktur tanpa kolom indeks
   st.dataframe(df_list, use_container_width=True, hide_index=True)
 
   st.markdown("---")
@@ -135,7 +135,7 @@ if "faktur_items" in st.session_state:
             if isinstance(det_items, list) and len(det_items) > 0:
               df_detail = pd.DataFrame(det_items)
 
-              # Menghapus kolom 'conv2' jika ada dalam data
+              # Menghapus kolom 'conv2' jika ada
               if "conv2" in df_detail.columns:
                 df_detail = df_detail.drop(columns=["conv2"])
 
@@ -179,17 +179,16 @@ if "faktur_items" in st.session_state:
                 lov_summary.columns = ["Container", "Item", "Qty"]
 
                 st.subheader("📦 LOV CONTAINER (Ringkasan)")
-                # Menampilkan ringkasan tanpa kolom indeks
                 st.dataframe(
                     lov_summary, use_container_width=True, hide_index=True
                 )
 
                 st.markdown("---")
-                st.subheader("🔍 Detail Item Per Kontainer")
+                st.subheader("🔍 Detail Item Per Kontainer (Dropdown / Filter)")
 
                 daftar_kontainer = lov_summary["Container"].tolist()
                 pilihan_kontainer = st.selectbox(
-                    "Pilih Kontainer:", daftar_kontainer
+                    "Pilih Kontainer Spesifik:", daftar_kontainer
                 )
 
                 if pilihan_kontainer:
@@ -201,10 +200,32 @@ if "faktur_items" in st.session_state:
                       f"Daftar Item dalam Kontainer: **{pilihan_kontainer}**"
                       f" (Total: {len(df_sub)} item)"
                   )
-                  # Menampilkan detail item per kontainer tanpa indeks & tanpa conv2
                   st.dataframe(
                       df_sub, use_container_width=True, hide_index=True
                   )
+
+                st.markdown("---")
+                st.subheader("📂 Daftar Semua Kontainer (Kartu / Expander)")
+
+                # MEMBUNYIKAN / MENAMPILKAN KEMBALI DAFTAR LIST EXPANDER PER KONTAINER
+                for kontainer in daftar_kontainer:
+                  df_sub_exp = df_detail[
+                      df_detail["kontainer"].astype(str) == str(kontainer)
+                  ]
+                  jml_item = len(df_sub_exp)
+                  total_qty_sub = pd.to_numeric(
+                      df_sub_exp[qty_col], errors="coerce"
+                  ).sum()
+
+                  label_expander = (
+                      f"📦 Container: {kontainer}  |  Item: {jml_item}  |  Qty:"
+                      f" {total_qty_sub:,.0f}"
+                  )
+
+                  with st.expander(label_expander):
+                    st.dataframe(
+                        df_sub_exp, use_container_width=True, hide_index=True
+                    )
 
             else:
               st.info("Detail data kosong.")
