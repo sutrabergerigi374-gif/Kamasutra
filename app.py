@@ -4,24 +4,31 @@ import streamlit as st
 
 # 1. Konfigurasi Halaman Streamlit
 st.set_page_config(
-    page_title="CEK ITEM KONTAINER SALAM KLOSAR KLOSER",
+    page_title="Container Viewer",
     page_icon="📦",
     layout="wide",
-    initial_sidebar_state="collapsed",  # Sidebar otomatis terlipat saat dibuka
 )
 
-# 2. PENYISIPAN CSS (Menyembunyikan Menu, Header, Footer & Full Screen)
+# 2. Injeksi CSS (Sembunyikan Header, Footer, Status, Toolbar, dan Viewer Badge Pojok Bawah)
 hide_streamlit_style = """
     <style>
-    #MainMenu {visibility: hidden;}          /* Sembunyikan menu titik tiga (Repository/Settings) */
-    header {visibility: hidden;}             /* Sembunyikan header/topbar bawaan Streamlit */
-    footer {visibility: hidden;}             /* Sembunyikan footer 'Made with Streamlit' */
+    #MainMenu {visibility: hidden;}          /* Sembunyikan menu titik tiga */
+    header {visibility: hidden;}             /* Sembunyikan header bawaan */
+    footer {visibility: hidden;}             /* Sembunyikan footer */
     .stDeployButton {display:none;}          /* Sembunyikan tombol Deploy */
-    div[data-testid="stToolbar"] {visibility: hidden; height: 0%;} /* Sembunyikan toolbar atas */
+    div[data-testid="stToolbar"] {visibility: hidden; height: 0%;}
     div[data-testid="stDecoration"] {visibility: hidden; width: 0%; height: 0%;}
     div[data-testid="stStatusWidget"] {visibility: hidden;}
+    
+    /* Sembunyikan elemen badge status & tombol pahlawan/crown di pojok kanan bawah */
+    div[data-testid="stAppViewBlockContainer"] + div {display: none !important;}
+    div[class*="viewerBadge"] {display: none !important;}
+    div[class*="stAppViewerBadges"] {display: none !important;}
+    .stApp > footer {display: none !important;}
+    iframe[title="Streamlit App Viewer"] {display: none !important;}
+    
     .block-container {
-        padding-top: 1rem;                   /* Mengurangi spasi kosong di bagian atas */
+        padding-top: 1rem;                   /* Kurangi spasi atas */
         padding-bottom: 1rem;
     }
     </style>
@@ -30,11 +37,11 @@ st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
 st.title("LOV Container & Detail PO")
 st.write(
-    "Aplikasi untuk mengecek daftar faktur, ringkasan kontainer (LOV Container),"
-    " serta detail item per kontainer."
+    "Aplikasi untuk mengecek daftar faktur, isi ringkasan kontainer (LOV Container),"
+    "SALAM KLOSAR KLOSER."
 )
 
-# Kamus / Dictionary Store ID lan Nama Toko
+# Kamus / Dictionary Store ID dan Nama Toko
 STORE_OPTIONS = {
     "M1U8": "M1U8 - KARANGTALUN TLA",
     "M953": "M953 - KALIDAWIR TLG",
@@ -56,21 +63,31 @@ STORE_OPTIONS = {
     "M1Y5": "M1Y5 - BALESONO TLA",
 }
 
-# Sidebar / Form Input mawi Selectbox (Dropdown)
-st.sidebar.header("Filter & Parameter Input")
+# =========================================================
+# FORM INPUT TOKO DI HALAMAN UTAMA (TANPA PANEL KIRI)
+# =========================================================
+st.markdown("---")
+st.subheader("🏪 Pilih Toko & Parameter Input")
 
-selected_store_label = st.sidebar.selectbox(
-    "Pilih Toko (Store ID):",
-    options=list(STORE_OPTIONS.values()),
-    index=8,  # Default M888 KACANGAN TULUNGAGUNG
-)
+col_input1, col_input2 = st.columns([2, 1])
+
+with col_input1:
+  selected_store_label = st.selectbox(
+      "Pilih Toko (Store ID):",
+      options=list(STORE_OPTIONS.values()),
+      index=8,  # Default M888 KACANGAN TULUNGAGUNG
+  )
+
+with col_input2:
+  filter_val = st.text_input(
+      "Filter (Opsional):", value="", help="Nilai filter jika ada"
+  )
 
 # Mengambil Kode Store ID (4 karakter pertama)
 store_id = selected_store_label.split(" - ")[0]
 
-filter_val = st.sidebar.text_input(
-    "Filter (Opsional):", value="", help="Nilai filter jika ada"
-)
+# Tombol Muat Daftar Faktur di Halaman Utama
+btn_load = st.button("🔄 Muat Daftar Faktur", use_container_width=True)
 
 # Endpoint API
 endpoint_list = "/prd/api/lpb/tablet/lpb/get_faktur/"
@@ -109,7 +126,7 @@ def format_rupiah_murni(val):
     return str(val)
 
 
-if st.sidebar.button("Muat Daftar Faktur"):
+if btn_load:
   url = f"https://app.alfastore.co.id{endpoint_list}"
   params = {"storeId": store_id, "filter": filter_val}
 
@@ -205,7 +222,10 @@ if "faktur_items" in st.session_state:
           st.error(f"Terjadi kesalahan: {e}")
 
     # Tampilkan Detail jika sudah dimuat dalam session state
-    if "df_detail" in st.session_state and st.session_state.get("faktur_active") == selected_faktur:
+    if (
+        "df_detail" in st.session_state
+        and st.session_state.get("faktur_active") == selected_faktur
+    ):
       df_detail = st.session_state["df_detail"]
       formatted_total_rp = st.session_state["formatted_total_rp"]
 
@@ -236,20 +256,29 @@ if "faktur_items" in st.session_state:
 
       if search_query.strip():
         q = search_query.strip().lower()
-        
+
         mask = pd.Series(False, index=df_detail.index)
         if "plu" in df_detail.columns:
           mask = mask | df_detail["plu"].astype(str).str.lower().str.contains(q)
         if "descp" in df_detail.columns:
-          mask = mask | df_detail["descp"].astype(str).str.lower().str.contains(q)
+          mask = (
+              mask | df_detail["descp"].astype(str).str.lower().str.contains(q)
+          )
 
         df_search_res = df_detail[mask]
 
         if not df_search_res.empty:
-          st.success(f"Ditemukan **{len(df_search_res)}** item hasil pencarian:")
-          st.dataframe(df_search_res, use_container_width=True, hide_index=True)
+          st.success(
+              f"Ditemukan **{len(df_search_res)}** item hasil pencarian:"
+          )
+          st.dataframe(
+              df_search_res, use_container_width=True, hide_index=True
+          )
         else:
-          st.warning(f"Barang dengan kata kunci **'{search_query}'** tidak ditemukan pada PO ini.")
+          st.warning(
+              f"Barang dengan kata kunci **'{search_query}'** tidak ditemukan"
+              " pada PO ini."
+          )
         st.markdown("---")
 
       # Ringkasan LOV Container
@@ -275,9 +304,7 @@ if "faktur_items" in st.session_state:
         lov_summary.columns = ["Container", "Item", "Qty"]
 
         st.subheader("📦 LOV CONTAINER (Ringkasan)")
-        st.dataframe(
-            lov_summary, use_container_width=True, hide_index=True
-        )
+        st.dataframe(lov_summary, use_container_width=True, hide_index=True)
 
         st.markdown("---")
         st.subheader("🔍 Detail Item Per Kontainer (Dropdown / Filter)")
@@ -289,16 +316,13 @@ if "faktur_items" in st.session_state:
 
         if pilihan_kontainer:
           df_sub = df_detail[
-              df_detail["kontainer"].astype(str)
-              == str(pilihan_kontainer)
+              df_detail["kontainer"].astype(str) == str(pilihan_kontainer)
           ]
           st.info(
               f"Daftar Item dalam Kontainer: **{pilihan_kontainer}**"
               f" (Total: {len(df_sub)} item)"
           )
-          st.dataframe(
-              df_sub, use_container_width=True, hide_index=True
-          )
+          st.dataframe(df_sub, use_container_width=True, hide_index=True)
 
         st.markdown("---")
         st.subheader("📂 Daftar Semua Kontainer (Kartu / Expander)")
@@ -326,6 +350,6 @@ if "faktur_items" in st.session_state:
     st.info("Tidak ada faktur yang tersedia untuk dipilih.")
 else:
   st.info(
-      "Silakan pilih Toko di panel sebelah kiri, lalu klik **Muat Daftar"
-      " Faktur** terlebih dahulu."
+      "Silakan pilih Toko di atas, lalu klik **Muat Daftar Faktur** terlebih"
+      " dahulu."
   )
