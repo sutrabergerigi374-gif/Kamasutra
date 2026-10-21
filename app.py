@@ -4,41 +4,45 @@ import streamlit as st
 
 # 1. Konfigurasi Halaman Streamlit
 st.set_page_config(
-    page_title="Container Viewer",
+    page_title="CEXP-CLOUD LOV Container Viewer",
     page_icon="📦",
     layout="wide",
 )
 
-# 2. Injeksi CSS (Sembunyikan Header, Footer, Status, Toolbar, dan Viewer Badge Pojok Bawah)
+# 2. Injeksi CSS Khusus untuk Menyembunyikan Elemen Kanan Bawah & Topbar
 hide_streamlit_style = """
     <style>
-    #MainMenu {visibility: hidden;}          /* Sembunyikan menu titik tiga */
-    header {visibility: hidden;}             /* Sembunyikan header bawaan */
-    footer {visibility: hidden;}             /* Sembunyikan footer */
-    .stDeployButton {display:none;}          /* Sembunyikan tombol Deploy */
-    div[data-testid="stToolbar"] {visibility: hidden; height: 0%;}
-    div[data-testid="stDecoration"] {visibility: hidden; width: 0%; height: 0%;}
-    div[data-testid="stStatusWidget"] {visibility: hidden;}
+    /* Sembunyikan Header, Footer, & Menu Titik Tiga Bawaan */
+    #MainMenu {visibility: hidden !important;}
+    header {visibility: hidden !important;}
+    footer {visibility: hidden !important;}
+    .stDeployButton {display: none !important;}
+    div[data-testid="stToolbar"] {visibility: hidden !important; height: 0% !important;}
+    div[data-testid="stDecoration"] {visibility: hidden !important; width: 0% !important; height: 0% !important;}
+    div[data-testid="stStatusWidget"] {visibility: hidden !important;}
     
-    /* Sembunyikan elemen badge status & tombol pahlawan/crown di pojok kanan bawah */
-    div[data-testid="stAppViewBlockContainer"] + div {display: none !important;}
+    /* Target Khusus Sembunyikan Tombol/Badge Mahkota & Status Pojok Kanan Bawah */
+    [data-testid="stAppViewBlockContainer"] + div {display: none !important;}
     div[class*="viewerBadge"] {display: none !important;}
     div[class*="stAppViewerBadges"] {display: none !important;}
+    div[class*="stStatusWidget"] {display: none !important;}
     .stApp > footer {display: none !important;}
     iframe[title="Streamlit App Viewer"] {display: none !important;}
+    #root > div:nth-child(2) {display: none !important;}
     
+    /* Optimasi jarak spasi layar */
     .block-container {
-        padding-top: 1rem;                   /* Kurangi spasi atas */
+        padding-top: 1rem;
         padding-bottom: 1rem;
     }
     </style>
 """
 st.markdown(hide_streamlit_style, unsafe_allow_html=True)
 
-st.title("LOV Container & Detail PO")
+st.title("🚀 Alfastore - LOV Container & Detail PO")
 st.write(
-    "Aplikasi untuk mengecek daftar faktur, isi ringkasan kontainer (LOV Container),"
-    "SALAM KLOSAR KLOSER."
+    "Aplikasi untuk mengecek daftar faktur, ringkasan kontainer (LOV Container),"
+    " serta detail item per kontainer."
 )
 
 # Kamus / Dictionary Store ID dan Nama Toko
@@ -104,7 +108,7 @@ headers = {
     "Version-App": "V.2024.10.15",
     "Version-Code": "11",
     "App-Uid": "10269",
-    "User-Id": "0",
+    "User-Id": "24123825",
     "Store-Id": store_id,
     "Api-Key": "iVOZX9MLmKrj1L8R23uF1aryMR1vGMXG",
     "Platform": "ANDROID",
