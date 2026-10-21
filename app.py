@@ -2,12 +2,33 @@ import pandas as pd
 import requests
 import streamlit as st
 
-# Konfigurasi Halaman Streamlit
+# 1. Konfigurasi Halaman Streamlit
 st.set_page_config(
-    page_title="CEXP-CLOUD LOV Container Viewer", page_icon="📦", layout="wide"
+    page_title="CEK ITEM KONTAINER SALAM KLOSAR KLOSER",
+    page_icon="📦",
+    layout="wide",
+    initial_sidebar_state="collapsed",  # Sidebar otomatis terlipat saat dibuka
 )
 
-st.title("🚀 Alfastore - LOV Container & Detail PO")
+# 2. PENYISIPAN CSS (Menyembunyikan Menu, Header, Footer & Full Screen)
+hide_streamlit_style = """
+    <style>
+    #MainMenu {visibility: hidden;}          /* Sembunyikan menu titik tiga (Repository/Settings) */
+    header {visibility: hidden;}             /* Sembunyikan header/topbar bawaan Streamlit */
+    footer {visibility: hidden;}             /* Sembunyikan footer 'Made with Streamlit' */
+    .stDeployButton {display:none;}          /* Sembunyikan tombol Deploy */
+    div[data-testid="stToolbar"] {visibility: hidden; height: 0%;} /* Sembunyikan toolbar atas */
+    div[data-testid="stDecoration"] {visibility: hidden; width: 0%; height: 0%;}
+    div[data-testid="stStatusWidget"] {visibility: hidden;}
+    .block-container {
+        padding-top: 1rem;                   /* Mengurangi spasi kosong di bagian atas */
+        padding-bottom: 1rem;
+    }
+    </style>
+"""
+st.markdown(hide_streamlit_style, unsafe_allow_html=True)
+
+st.title("LOV Container & Detail PO")
 st.write(
     "Aplikasi untuk mengecek daftar faktur, ringkasan kontainer (LOV Container),"
     " serta detail item per kontainer."
@@ -205,9 +226,7 @@ if "faktur_items" in st.session_state:
 
       st.markdown("---")
 
-      # =========================================================
       # FITUR 1: PENCARIAN PLU & NAMA BARANG (DESCP)
-      # =========================================================
       st.subheader("🔍 Cari Lokasi Kontainer Barang")
       search_query = st.text_input(
           "🔎 Cari PLU atau Nama Barang (Descp):",
@@ -218,7 +237,6 @@ if "faktur_items" in st.session_state:
       if search_query.strip():
         q = search_query.strip().lower()
         
-        # Filter berdasarkan PLU atau deskripsi barang
         mask = pd.Series(False, index=df_detail.index)
         if "plu" in df_detail.columns:
           mask = mask | df_detail["plu"].astype(str).str.lower().str.contains(q)
