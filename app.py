@@ -9,28 +9,29 @@ st.set_page_config(
     layout="wide",
 )
 
-# 2. Injeksi CSS Khusus untuk Menyembunyikan Elemen Kanan Bawah & Topbar
+# 2. Injeksi CSS Lengkap (Sembunyikan Header, Footer, Watermark, & Menu Streamlit)
 hide_streamlit_style = """
     <style>
     /* Sembunyikan Header, Footer, & Menu Titik Tiga Bawaan */
-    #MainMenu {visibility: hidden !important;}
-    header {visibility: hidden !important;}
-    footer {visibility: hidden !important;}
+    #MainMenu {visibility: hidden !important; display: none !important;}
+    header {visibility: hidden !important; display: none !important;}
+    footer {visibility: hidden !important; display: none !important;}
+    footer[data-testid="stFooter"] {display: none !important; visibility: hidden !important;}
     .stDeployButton {display: none !important;}
-    div[data-testid="stToolbar"] {visibility: hidden !important; height: 0% !important;}
-    div[data-testid="stDecoration"] {visibility: hidden !important; width: 0% !important; height: 0% !important;}
-    div[data-testid="stStatusWidget"] {visibility: hidden !important;}
     
-    /* Target Khusus Sembunyikan Tombol/Badge Mahkota & Status Pojok Kanan Bawah */
+    /* Sembunyikan Toolbar & Status Widget */
+    div[data-testid="stToolbar"] {visibility: hidden !important; height: 0px !important;}
+    div[data-testid="stDecoration"] {visibility: hidden !important; width: 0px !important; height: 0px !important;}
+    div[data-testid="stStatusWidget"] {visibility: hidden !important; display: none !important;}
+    
+    /* Sembunyikan "Hosted with Streamlit" & Badge Kanan Bawah */
+    .stApp > footer {display: none !important; visibility: hidden !important;}
     [data-testid="stAppViewBlockContainer"] + div {display: none !important;}
     div[class*="viewerBadge"] {display: none !important;}
     div[class*="stAppViewerBadges"] {display: none !important;}
-    div[class*="stStatusWidget"] {display: none !important;}
-    .stApp > footer {display: none !important;}
     iframe[title="Streamlit App Viewer"] {display: none !important;}
-    #root > div:nth-child(2) {display: none !important;}
     
-    /* Optimasi jarak spasi layar */
+    /* Optimasi Jarak Layar */
     .block-container {
         padding-top: 1rem;
         padding-bottom: 1rem;
@@ -90,7 +91,7 @@ with col_input2:
 # Mengambil Kode Store ID (4 karakter pertama)
 store_id = selected_store_label.split(" - ")[0]
 
-# Tombol Muat Daftar Faktur di Halaman Utama
+# Tombol Muat Daftar Faktur
 btn_load = st.button("🔄 Muat Daftar Faktur", use_container_width=True)
 
 # Endpoint API
