@@ -141,13 +141,20 @@ def format_rupiah_murni(val):
 
 if btn_load:
     url = f"https://app.alfastore.co.id{endpoint_list}"
-    # Parameter diperbarui dengan menyertakan tanggal (date/tanggal)
     params = {"storeId": store_id, "date": date_str, "filter": filter_val}
 
     with st.spinner("Menghubungkan ke server..."):
         try:
-            # Pemanggilan API dengan penanganan status code lengkap
+            # Pemanggilan API
             response = requests.get(url, headers=headers, params=params, timeout=15)
+
+            # --- PANEL DEBUGGING (UNTUK MELIHAT RESPON ASLI SERVER) ---
+            with st.expander("🛠️ Lihat Informasi Debugging API (Penting)", expanded=True):
+                st.write(f"**URL Lengkap:** `{response.url}`")
+                st.write(f"**Status Code:** `{response.status_code}`")
+                st.write(f"**Isi Respons Mentah:**")
+                st.code(response.text if response.text else "(Kosong / No Content)")
+            # ----------------------------------------------------------
 
             if response.status_code == 200:
                 res_json = response.json()
@@ -166,16 +173,14 @@ if btn_load:
                         del st.session_state["faktur_items"]
 
             elif response.status_code == 204:
-                # Tangani Status Code 204 secara khusus
                 st.warning(
-                    "⚠️ Tidak ada data faktur / LOV Container yang ditemukan untuk toko dan tanggal ini (Status 204)."
+                    "⚠️ Server mengembalikan Status 204 (No Content): Tidak ada data faktur untuk parameter toko & tanggal tersebut."
                 )
                 if "faktur_items" in st.session_state:
                     del st.session_state["faktur_items"]
 
             else:
                 st.error(f"Gagal mengambil data. Status Code: {response.status_code}")
-                st.text(response.text)
 
         except Exception as e:
             st.error(f"Terjadi kesalahan koneksi: {e}")
@@ -194,7 +199,6 @@ if "faktur_items" in st.session_state:
     if "total_faktur" in df_list.columns:
         df_list["total_faktur"] = df_list["total_faktur"].apply(format_rupiah_murni)
 
-    # Menampilkan tabel daftar faktur tanpa kolom indeks
     st.dataframe(df_list, use_container_width=True, hide_index=True)
 
     st.markdown("---")
@@ -228,7 +232,6 @@ if "faktur_items" in st.session_state:
                         if isinstance(det_items, list) and len(det_items) > 0:
                             df_detail = pd.DataFrame(det_items)
 
-                            # Menghapus kolom 'conv2' jika ada
                             if "conv2" in df_detail.columns:
                                 df_detail = df_detail.drop(columns=["conv2"])
 
@@ -247,7 +250,6 @@ if "faktur_items" in st.session_state:
                 except Exception as e:
                     st.error(f"Terjadi kesalahan: {e}")
 
-        # Tampilkan Detail jika sudah dimuat dalam session state
         if (
             "df_detail" in st.session_state
             and st.session_state.get("faktur_active") == selected_faktur
@@ -259,7 +261,6 @@ if "faktur_items" in st.session_state:
                 f"Berhasil memuat LOV Container untuk PO: **{selected_faktur}**"
             )
 
-            # Ringkasan Metrik
             col_m1, col_m2, col_m3 = st.columns(3)
             col_m1.metric("Total Jenis Item", f"{len(df_detail)} PLU")
             col_m2.metric("Total Faktur", formatted_total_rp)
@@ -272,7 +273,6 @@ if "faktur_items" in st.session_state:
 
             st.markdown("---")
 
-            # FITUR 1: PENCARIAN PLU & NAMA BARANG (DESCP)
             st.subheader("🔍 Cari Lokasi Kontainer Barang")
             search_query = st.text_input(
                 "🔎 Cari PLU atau Nama Barang (Descp):",
@@ -307,7 +307,6 @@ if "faktur_items" in st.session_state:
                     )
                 st.markdown("---")
 
-            # Ringkasan LOV Container
             if "kontainer" in df_detail.columns:
                 qty_col = (
                     "qty_ship"
