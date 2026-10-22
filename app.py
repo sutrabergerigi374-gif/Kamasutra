@@ -1,3 +1,4 @@
+import datetime
 import pandas as pd
 import requests
 import streamlit as st
@@ -69,12 +70,12 @@ STORE_OPTIONS = {
 }
 
 # =========================================================
-# FORM INPUT TOKO DI HALAMAN UTAMA (TANPA PANEL KIRI)
+# FORM INPUT TOKO & TANGGAL DI HALAMAN UTAMA
 # =========================================================
 st.markdown("---")
 st.subheader("🏪 Pilih Toko & Parameter Input")
 
-col_input1, col_input2 = st.columns([2, 1])
+col_input1, col_input2, col_input3 = st.columns([2, 1, 1])
 
 with col_input1:
     selected_store_label = st.selectbox(
@@ -84,12 +85,19 @@ with col_input1:
     )
 
 with col_input2:
+    selected_date = st.date_input(
+        "Pilih Tanggal:",
+        value=datetime.date.today()
+    )
+
+with col_input3:
     filter_val = st.text_input(
         "Filter (Opsional):", value="", help="Nilai filter jika ada"
     )
 
-# Mengambil Kode Store ID (4 karakter pertama)
+# Mengambil Kode Store ID (4 karakter pertama) dan Format Tanggal
 store_id = selected_store_label.split(" - ")[0]
+date_str = selected_date.strftime("%Y-%m-%d")
 
 # Tombol Muat Daftar Faktur
 btn_load = st.button("🔄 Muat Daftar Faktur", use_container_width=True)
@@ -133,7 +141,8 @@ def format_rupiah_murni(val):
 
 if btn_load:
     url = f"https://app.alfastore.co.id{endpoint_list}"
-    params = {"storeId": store_id, "filter": filter_val}
+    # Parameter diperbarui dengan menyertakan tanggal (date/tanggal)
+    params = {"storeId": store_id, "date": date_str, "filter": filter_val}
 
     with st.spinner("Menghubungkan ke server..."):
         try:
@@ -146,21 +155,20 @@ if btn_load:
 
                 if isinstance(items, list) and len(items) > 0:
                     st.success(
-                        f"Berhasil mengambil daftar faktur untuk Store: **{selected_store_label}**"
+                        f"Berhasil mengambil daftar faktur untuk Store: **{selected_store_label}** (Tanggal: {date_str})"
                     )
                     st.session_state["faktur_items"] = items
                     st.session_state["store_id"] = store_id
                     st.session_state["store_label"] = selected_store_label
                 else:
-                    st.warning("⚠️ Data kosong dari server untuk toko ini.")
-                    # Bersihkan session state lama jika ada agar tidak menampilkan data sisa toko sebelumnya
+                    st.warning("⚠️ Data kosong dari server untuk toko dan tanggal ini.")
                     if "faktur_items" in st.session_state:
                         del st.session_state["faktur_items"]
 
             elif response.status_code == 204:
                 # Tangani Status Code 204 secara khusus
                 st.warning(
-                    "⚠️ Tidak ada data faktur / LOV Container yang ditemukan untuk toko ini saat ini (Status 204)."
+                    "⚠️ Tidak ada data faktur / LOV Container yang ditemukan untuk toko dan tanggal ini (Status 204)."
                 )
                 if "faktur_items" in st.session_state:
                     del st.session_state["faktur_items"]
@@ -368,6 +376,6 @@ if "faktur_items" in st.session_state:
         st.info("Tidak ada faktur yang tersedia untuk dipilih.")
 else:
     st.info(
-        "Silakan pilih Toko di atas, lalu klik **Muat Daftar Faktur** terlebih"
+        "Silakan pilih Toko dan Tanggal di atas, lalu klik **Muat Daftar Faktur** terlebih"
         " dahulu."
     )
