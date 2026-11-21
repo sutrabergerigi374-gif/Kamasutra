@@ -1,4 +1,7 @@
 import datetime
+import io
+from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.utils import get_column_letter
 import pandas as pd
 import requests
 import streamlit as st
@@ -86,8 +89,7 @@ with col_input1:
 
 with col_input2:
     selected_date = st.date_input(
-        "Pilih Tanggal:",
-        value=datetime.date.today()
+        "Pilih Tanggal:", value=datetime.date.today()
     )
 
 with col_input3:
@@ -139,14 +141,87 @@ def format_rupiah_murni(val):
         return str(val)
 
 
+# Fungsi Pembuat File Excel Rapi
+def buat_excel_rapi(df_summary, df_detail, no_faktur, store_label):
+    output = io.BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        # Sheet 1: Ringkasan LOV Container (mulai baris ke-4 agar ada kop laporan)
+        if df_summary is not None and not df_summary.empty:
+            df_summary.to_excel(
+                writer, index=False, sheet_name="Ringkasan_LOV", startrow=3
+            )
+
+        # Sheet 2: Detail Semua Item (mulai baris ke-4)
+        df_detail.to_excel(
+            writer, index=False, sheet_name="Detail_Item", startrow=3
+        )
+
+        # Styling untuk semua sheet yang terbentuk
+        workbook = writer.book
+        header_fill = PatternFill(
+            start_color="1F4E78", end_color="1F4E78", fill_type="solid"
+        )
+        header_font = Font(color="FFFFFF", bold=True, size=11)
+        title_font = Font(bold=True, size=13, color="1F4E78")
+        thin_border = Border(
+            left=Side(style="thin"),
+            right=Side(style="thin"),
+            top=Side(style="thin"),
+            bottom=Side(style="thin"),
+        )
+
+        for sheet_name in workbook.sheetnames:
+            ws = workbook[sheet_name]
+
+            # Tulis Judul & Info PO di baris 1 & 2
+            ws["A1"] = f"LAPORAN {sheet_name.replace('_', ' ').upper()}"
+            ws["A1"].font = title_font
+            ws["A2"] = f"Toko: {store_label} | No. Faktur: {no_faktur}"
+            ws["A2"].font = Font(italic=True, size=10)
+
+            # Styling Header Tabel (Baris ke-4)
+            for cell in ws[4]:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = Alignment(
+                    horizontal="center", vertical="center"
+                )
+                cell.border = thin_border
+
+            # Styling Isi Data & Auto-fit Lebar Kolom
+            for col_idx, col in enumerate(ws.columns, start=1):
+                max_length = 0
+                col_letter = get_column_letter(col_idx)
+
+                for cell in col:
+                    # Beri border untuk baris tabel (baris >= 4)
+                    if cell.row >= 4:
+                        cell.border = thin_border
+                        if cell.row > 4:
+                            cell.alignment = Alignment(vertical="center")
+
+                    # Hitung panjang karakter (abaikan kop baris 1 & 2)
+                    if cell.row >= 4 and cell.value is not None:
+                        max_length = max(max_length, len(str(cell.value)))
+
+                # Atur lebar kolom dengan ruang ekstra
+                ws.column_dimensions[col_letter].width = max_length + 4
+
+            # Bekukan header agar nyaman saat di-scroll di Excel
+            ws.freeze_panes = "A5"
+
+    return output.getvalue()
+
+
 if btn_load:
     url = f"https://app.alfastore.co.id{endpoint_list}"
     params = {"storeId": store_id, "date": date_str, "filter": filter_val}
 
     with st.spinner("Menghubungkan ke server..."):
         try:
-            # Pemanggilan API (Panel debug URL & Response mentah sudah dihapus aman)
-            response = requests.get(url, headers=headers, params=params, timeout=15)
+            response = requests.get(
+                url, headers=headers, params=params, timeout=15
+            )
 
             if response.status_code == 200:
                 res_json = response.json()
@@ -160,7 +235,9 @@ if btn_load:
                     st.session_state["store_id"] = store_id
                     st.session_state["store_label"] = selected_store_label
                 else:
-                    st.warning("⚠️ Data kosong dari server untuk toko dan tanggal ini.")
+                    st.warning(
+                        "⚠️ Data kosong dari server untuk toko dan tanggal ini."
+                    )
                     if "faktur_items" in st.session_state:
                         del st.session_state["faktur_items"]
 
@@ -172,7 +249,9 @@ if btn_load:
                     del st.session_state["faktur_items"]
 
             else:
-                st.error(f"Gagal mengambil data. Status Code: {response.status_code}")
+                st.error(
+                    f"Gagal mengambil data. Status Code: {response.status_code}"
+                )
 
         except Exception as e:
             st.error(f"Terjadi kesalahan koneksi: {e}")
@@ -189,7 +268,9 @@ if "faktur_items" in st.session_state:
     df_list = pd.DataFrame(items)
 
     if "total_faktur" in df_list.columns:
-        df_list["total_faktur"] = df_list["total_faktur"].apply(format_rupiah_murni)
+        df_list["total_faktur"] = df_list["total_faktur"].apply(
+            format_rupiah_murni
+        )
 
     st.dataframe(df_list, use_container_width=True, hide_index=True)
 
@@ -202,19 +283,28 @@ if "faktur_items" in st.session_state:
         selected_faktur = st.selectbox("Pilih Nomor Faktur:", list_faktur)
 
         selected_row = next(
-            (item for item in items if item.get("faktur") == selected_faktur), {}
+            (item for item in items if item.get("faktur") == selected_faktur),
+            {},
         )
         raw_total_faktur = selected_row.get("total_faktur", 0)
         formatted_total_rp = format_rupiah_murni(raw_total_faktur)
 
         if st.button("👁️ Buka LOV Container / Lihat Isi"):
             detail_url = f"https://app.alfastore.co.id{endpoint_detail}"
-            detail_params = {"storeId": current_store, "faktur": selected_faktur}
+            detail_params = {
+                "storeId": current_store,
+                "faktur": selected_faktur,
+            }
 
-            with st.spinner(f"Memuat LOV Container untuk Faktur {selected_faktur}..."):
+            with st.spinner(
+                f"Memuat LOV Container untuk Faktur {selected_faktur}..."
+            ):
                 try:
                     det_response = requests.post(
-                        detail_url, headers=headers, params=detail_params, timeout=15
+                        detail_url,
+                        headers=headers,
+                        params=detail_params,
+                        timeout=15,
                     )
 
                     if det_response.status_code == 200:
@@ -229,11 +319,15 @@ if "faktur_items" in st.session_state:
 
                             st.session_state["df_detail"] = df_detail
                             st.session_state["faktur_active"] = selected_faktur
-                            st.session_state["formatted_total_rp"] = formatted_total_rp
+                            st.session_state["formatted_total_rp"] = (
+                                formatted_total_rp
+                            )
                         else:
                             st.info("Detail data kosong.")
                     elif det_response.status_code == 204:
-                        st.warning("⚠️ Detail data faktur ini kosong (Status 204).")
+                        st.warning(
+                            "⚠️ Detail data faktur ini kosong (Status 204)."
+                        )
                     else:
                         st.error(
                             f"Gagal mengambil detail. Status: {det_response.status_code}"
@@ -263,6 +357,44 @@ if "faktur_items" in st.session_state:
             else:
                 col_m3.metric("Total Kontainer", "-")
 
+            # Hitung ringkasan LOV terlebih dahulu agar bisa ikut di-export ke Excel
+            lov_summary = pd.DataFrame()
+            qty_col = (
+                "qty_ship"
+                if "qty_ship" in df_detail.columns
+                else (
+                    "qty_pick"
+                    if "qty_pick" in df_detail.columns
+                    else df_detail.columns[0]
+                )
+            )
+            if "kontainer" in df_detail.columns:
+                lov_summary = (
+                    df_detail.groupby("kontainer")
+                    .agg(
+                        Item=("plu", "count"),
+                        Qty=(qty_col, "sum"),
+                    )
+                    .reset_index()
+                )
+                lov_summary.columns = ["Container", "Item", "Qty"]
+
+            # --- TOMBOL DOWNLOAD EXCEL ---
+            excel_data = buat_excel_rapi(
+                df_summary=lov_summary,
+                df_detail=df_detail,
+                no_faktur=selected_faktur,
+                store_label=current_label,
+            )
+
+            st.download_button(
+                label="📥 Download Laporan Excel (.xlsx)",
+                data=excel_data,
+                file_name=f"LOV_{current_store}_{selected_faktur}.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                use_container_width=True,
+            )
+
             st.markdown("---")
 
             st.subheader("🔍 Cari Lokasi Kontainer Barang")
@@ -277,11 +409,13 @@ if "faktur_items" in st.session_state:
 
                 mask = pd.Series(False, index=df_detail.index)
                 if "plu" in df_detail.columns:
-                    mask = mask | df_detail["plu"].astype(str).str.lower().str.contains(q)
+                    mask = mask | df_detail["plu"].astype(
+                        str
+                    ).str.lower().str.contains(q)
                 if "descp" in df_detail.columns:
-                    mask = (
-                        mask | df_detail["descp"].astype(str).str.lower().str.contains(q)
-                    )
+                    mask = mask | df_detail["descp"].astype(
+                        str
+                    ).str.lower().str.contains(q)
 
                 df_search_res = df_detail[mask]
 
@@ -299,29 +433,11 @@ if "faktur_items" in st.session_state:
                     )
                 st.markdown("---")
 
-            if "kontainer" in df_detail.columns:
-                qty_col = (
-                    "qty_ship"
-                    if "qty_ship" in df_detail.columns
-                    else (
-                        "qty_pick"
-                        if "qty_pick" in df_detail.columns
-                        else df_detail.columns[0]
-                    )
-                )
-
-                lov_summary = (
-                    df_detail.groupby("kontainer")
-                    .agg(
-                        Item=("plu", "count"),
-                        Qty=(qty_col, "sum"),
-                    )
-                    .reset_index()
-                )
-                lov_summary.columns = ["Container", "Item", "Qty"]
-
+            if "kontainer" in df_detail.columns and not lov_summary.empty:
                 st.subheader("📦 LOV CONTAINER (Ringkasan)")
-                st.dataframe(lov_summary, use_container_width=True, hide_index=True)
+                st.dataframe(
+                    lov_summary, use_container_width=True, hide_index=True
+                )
 
                 st.markdown("---")
                 st.subheader("🔍 Detail Item Per Kontainer (Dropdown / Filter)")
@@ -333,13 +449,16 @@ if "faktur_items" in st.session_state:
 
                 if pilihan_kontainer:
                     df_sub = df_detail[
-                        df_detail["kontainer"].astype(str) == str(pilihan_kontainer)
+                        df_detail["kontainer"].astype(str)
+                        == str(pilihan_kontainer)
                     ]
                     st.info(
                         f"Daftar Item dalam Kontainer: **{pilihan_kontainer}**"
                         f" (Total: {len(df_sub)} item)"
                     )
-                    st.dataframe(df_sub, use_container_width=True, hide_index=True)
+                    st.dataframe(
+                        df_sub, use_container_width=True, hide_index=True
+                    )
 
                 st.markdown("---")
                 st.subheader("📂 Daftar Semua Kontainer (Kartu / Expander)")
